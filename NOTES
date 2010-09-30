@@ -13,6 +13,7 @@
         - over the /proc/pid/maps walking
     - KLONG ?
     - various architectures
+    - kernel version control without libproc?
 
 2.Data structures
 
@@ -140,6 +141,7 @@
     struct * kpagemap_t   open_kpagemap(struct * kpagemap_t);
     void                  close_kpagemap(struct * kpagemap_t);
     struct * pagemap_tbl  alloc_tables(struct * pagemap_tbl);
+    struct * pagemap_tbl  walk_procdir(struct * pagemap_tbl);
     struct * pagemap_tbl  fill_mappings(struct * pagemap_tbl);
     struct * proc_mapping read_maps(struct * pagemap_t);
     struct * proc_mapping read_maps_spec(struct * pagemap_t,unsigned long start, unsigned long end);

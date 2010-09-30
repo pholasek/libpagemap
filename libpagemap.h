@@ -1,6 +1,7 @@
-struct pagemap_t {
+typedef struct pagemap_t {
     int pid,
-    struct proc_maps * mappings,
+    proc_mapping * mappings,
+    int num_mappings;
    // non-kpageflags counts
     unsigned long uss,      // number of pages of uss memory
     unsigned long pss,      // number of pages of pss memory
@@ -34,30 +35,39 @@ struct pagemap_t {
     unsigned long n_unevctb,    // number of unevictable pages 
     unsigned long n_referenced, // number of pages which were referenced since last LRU
                                     // enqueue/requeue
-    unsigned long n_2recycle,   // number of pages which are assigned to recycling
-}
+    unsigned long n_2recycle;   // number of pages which are assigned to recycling
+} pagemap_t;
 
-struct pagemap_tbl {
-    struct pagemap_t ** table, //or can be double-linked list for simpler add/delete
+/////////// TO BE OPTIMIZED TO SOMETHING FASTER /////////////
+typedef struct pagemap_list {
+    pagemap_t pid_table,
+    struct pagemap_list * next;
+} pagemap_list;
+/////////////////////////////////////////////////////////////
+
+typedef struct pagemap_tbl {
+    pagemap_list * start, //it will be root of tree
+    pagemap_list * curr,
     unsigned long size,  //number of pagemap process tables
     int flags;
-}
+} pagemap_tbl;
 
-struct proc_mapping {
-    unsigned long start, end, offset
+typedef struct proc_mapping {
+    unsigned long start, end, offset,
     unsigned long * pfns,
     int perms;
-}
+} proc_mapping;
 
-struct proc_maps {
-    struct proc_mapping * mappings,
-    int map_num;
-}
-
-struct kpagemap_t {
+typedef struct kpagemap_t {
     int kpgm_count_fd,
     int kpgm_flags_fd;
-}
+} kpagemap_t;
+
+#define PERM_WRITE      0x0100
+#define PERM_READ       0x0200
+#define PERM_EXEC       0x0400
+#define PERM_SHARE      0x0800
+#define PERM_PRIV       0x1000
 
 #define PAGEMAP_COUNTS  0x0001  // non-kpageflags stuff
 #define PAGEMAP_IO      0x0002  // IO stats  
@@ -65,6 +75,7 @@ struct kpagemap_t {
 #define PAGEMAP_LRU     0x0008  // LRU-related stats
 #define PAGEMAP_ROOT    0x0010  // without this internal flag we can count only res and swap
                                 // it is set if getuid() == 0
+#define BUFSIZE         512
 
 // alloc all pagemap tables and initialize them and alloc kpagemap_t
     struct * pagemap_tbl init_pgmap_table(struct * pagemap_tbl);
