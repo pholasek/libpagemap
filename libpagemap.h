@@ -27,7 +27,6 @@ typedef struct pagemap_t {
    // LRU related stats
     unsigned long n_mmap,       // number of pages of mmap()ed memmory
     unsigned long n_anon,       // number of pages of anonymous memory
-    unsigned long n_uptd,       // number of pages of up-to date memory
     unsigned long n_swpche,     // number of pages of swap-cached memory
     unsigned long n_swpbck,     // number of pages of swap-backed memory
     unsigned long n_onlru,      // number of pages of memory which are on LRU lists
@@ -48,7 +47,7 @@ typedef struct pagemap_list {
 typedef struct pagemap_tbl {
     pagemap_list * start, //it will be root of tree
     pagemap_list * curr,
-    unsigned long size,  //number of pagemap process tables
+    unsigned long size,  //number of pagemap processes
     int flags;
 } pagemap_tbl;
 
@@ -60,7 +59,8 @@ typedef struct proc_mapping {
 
 typedef struct kpagemap_t {
     int kpgm_count_fd,
-    int kpgm_flags_fd;
+    int kpgm_flags_fd,
+    long pagesize;
 } kpagemap_t;
 
 #define PERM_WRITE      0x0100
@@ -76,25 +76,35 @@ typedef struct kpagemap_t {
 #define PAGEMAP_ROOT    0x0010  // without this internal flag we can count only res and swap
                                 // it is set if getuid() == 0
 #define BUFSIZE         512
+#define SMALLBUF        128
+#define OK              0
+#define ERROR           1
+#define RD_ERROR        2
 
 // alloc all pagemap tables and initialize them and alloc kpagemap_t
-    struct * pagemap_tbl init_pgmap_table(struct * pagemap_tbl);
+pagemap_tbl * init_pgmap_table(struct * pagemap_tbl);
 
 // fill up pagemap tables for all processes on system
-    struct * pagemap_tbl open_pagemap(struct * pagemap_tbl, int flags);
+pagemap_tbl * open_pagemap(struct * pagemap_tbl, int flags);
+
+// iterate over pagemap_tbl - returns NULL at the end
+pagemap_t * iterate_over_all(struct * pagemap_tbl);
+
+// get exactly one pid from table
+pagemap_t * get_pid_from_table(struct * pagemap_tbl);
 
 // close pagemap tables and free them
-    void close_pgmap_table(struct * pagemap_tbl);
+void close_pgmap_table(struct * pagemap_tbl);
 
 // return single pagemap table for one pid - AD-HOC
-    struct * pagemap_t(int pid, int flags);
+pagemap_t * get_single_pgmap(int pid, int flags);
 
 // return sigle pagemap table for one memory mapping for given pid - AD-HOC
-    struct * pagemap_t(int pid, unsigned long start, unsigned long end, int flags);
+pagemap_t * get_mapping_pgmap(int pid, unsigned long start, unsigned long end, int flags);
 
 // return single pagemap table for physical memory mapping
 // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag
-    struct * pagemap_t(unsigned long start, unsigned long end, int flags);
+pagemap_t * get_physical_pgmap(unsigned long start, unsigned long end, int flags);
 
 // BIT_SET(num,index)
 #define BIT_SET(x,n) ((1LL << n) & x)
