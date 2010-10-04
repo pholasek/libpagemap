@@ -1,67 +1,69 @@
+typedef struct proc_mapping {
+    unsigned long start, end, offset;
+    unsigned long * pfns;
+    int perms;
+} proc_mapping;
+
 typedef struct pagemap_t {
-    int pid,
-    proc_mapping * mappings,
+    int pid;
+    proc_mapping * mappings;
     int num_mappings;
    // non-kpageflags counts
-    unsigned long uss,      // number of pages of uss memory
-    unsigned long pss,      // number of pages of pss memory
-    unsigned long swap,     // number of pages of memory in swap
-    unsigned long res,      // number of pages of memory in physical RAM
-    unsigned long shr,      // number of pages of shared memory
+    unsigned long uss;      // number of pages of uss memory
+    unsigned long pss;      // number of pages of pss memory
+    unsigned long swap;     // number of pages of memory in swap
+    unsigned long res;      // number of pages of memory in physical RAM
+    unsigned long shr;      // number of pages of shared memory
    // IO related page stats
-    unsigned long n_drt,    // number of dirty pages
-    unsigned long n_uptd,   // number of pages of up-to date memory
-    unsigned long n_wback,  // number of pages of just writebacked memory
-    unsigned long n_err,    // number of pages with IO errors
+    unsigned long n_drt;    // number of dirty pages
+    unsigned long n_uptd;   // number of pages of up-to date memory
+    unsigned long n_wback;  // number of pages of just writebacked memory
+    unsigned long n_err;    // number of pages with IO errors
    // various stats
-    unsigned long n_lck,    // number of locked pages
-    unsigned long n_slab,   // number of pages managed by sl{a,o,u,q}b allocator
-    unsigned long n_buddy,  // number of blocks managed by buddy system allocator
-    unsigned long n_cmpndh, // number of compound heads pages
-    unsigned long n_cmpndt, // number of compound tails pages - not accurate
-    unsigned long n_ksm,    // number of pages shared by ksm
-    unsigned long n_hwpois, // number of hw damaged pages
-    unsigned long n_huge,   // number of HugeTLB pages
-    unsinged long n_npage,  // number of non-existing page frames for given
+    unsigned long n_lck;    // number of locked pages
+    unsigned long n_slab;   // number of pages managed by sl{a,o,u,q}b allocator
+    unsigned long n_buddy;  // number of blocks managed by buddy system allocator
+    unsigned long n_cmpndh; // number of compound heads pages
+    unsigned long n_cmpndt; // number of compound tails pages - not accurate
+    unsigned long n_ksm;    // number of pages shared by ksm
+    unsigned long n_hwpois; // number of hw damaged pages
+    unsigned long n_huge;   // number of HugeTLB pages
+    unsigned long n_npage;  // number of non-existing page frames for given
                             //  addresses
    // LRU related stats
-    unsigned long n_mmap,       // number of pages of mmap()ed memmory
-    unsigned long n_anon,       // number of pages of anonymous memory
-    unsigned long n_swpche,     // number of pages of swap-cached memory
-    unsigned long n_swpbck,     // number of pages of swap-backed memory
-    unsigned long n_onlru,      // number of pages of memory which are on LRU lists
-    unsigned long n_actlru,     // number of pages of memory which are on active LRU lists
-    unsigned long n_unevctb,    // number of unevictable pages 
-    unsigned long n_referenced, // number of pages which were referenced since last LRU
+    unsigned long n_mmap;       // number of pages of mmap()ed memmory
+    unsigned long n_anon;       // number of pages of anonymous memory
+    unsigned long n_swpche;     // number of pages of swap-cached memory
+    unsigned long n_swpbck;     // number of pages of swap-backed memory
+    unsigned long n_onlru;      // number of pages of memory which are on LRU lists
+    unsigned long n_actlru;     // number of pages of memory which are on active LRU lists
+    unsigned long n_unevctb;    // number of unevictable pages 
+    unsigned long n_referenced; // number of pages which were referenced since last LRU
                                     // enqueue/requeue
     unsigned long n_2recycle;   // number of pages which are assigned to recycling
 } pagemap_t;
 
 /////////// TO BE OPTIMIZED TO SOMETHING FASTER /////////////
 typedef struct pagemap_list {
-    pagemap_t pid_table,
+    pagemap_t pid_table;
     struct pagemap_list * next;
 } pagemap_list;
 /////////////////////////////////////////////////////////////
 
-typedef struct pagemap_tbl {
-    pagemap_list * start, //it will be root of tree
-    pagemap_list * curr,
-    unsigned long size,  //number of pagemap processes
-    int flags;
-} pagemap_tbl;
-
-typedef struct proc_mapping {
-    unsigned long start, end, offset,
-    unsigned long * pfns,
-    int perms;
-} proc_mapping;
-
 typedef struct kpagemap_t {
-    int kpgm_count_fd,
-    int kpgm_flags_fd,
+    int kpgm_count_fd;
+    int kpgm_flags_fd;
     long pagesize;
 } kpagemap_t;
+
+typedef struct pagemap_tbl {
+    pagemap_list * start; //it will be root of tree
+    pagemap_list * curr;
+    unsigned long size;  //number of pagemap processes
+    int flags;
+    kpagemap_t kpagemap;
+} pagemap_tbl;
+
 
 #define PERM_WRITE      0x0100
 #define PERM_READ       0x0200
@@ -82,32 +84,38 @@ typedef struct kpagemap_t {
 #define RD_ERROR        2
 
 // alloc all pagemap tables and initialize them and alloc kpagemap_t
-pagemap_tbl * init_pgmap_table(struct * pagemap_tbl);
+pagemap_tbl * init_pgmap_table(pagemap_tbl * table);
 
 // fill up pagemap tables for all processes on system
-pagemap_tbl * open_pagemap(struct * pagemap_tbl, int flags);
+pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int flags);
 
 // iterate over pagemap_tbl - returns NULL at the end
-pagemap_t * iterate_over_all(struct * pagemap_tbl);
+pagemap_t * iterate_over_all(pagemap_tbl * table);
 
 // get exactly one pid from table
-pagemap_t * get_pid_from_table(struct * pagemap_tbl);
+pagemap_t * get_pid_from_table(pagemap_tbl * table);
 
 // close pagemap tables and free them
-void close_pgmap_table(struct * pagemap_tbl);
+void close_pgmap_table(pagemap_tbl * table);
 
 // return single pagemap table for one pid - AD-HOC
-pagemap_t * get_single_pgmap(int pid, int flags);
+pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid, int flags);
 
 // return sigle pagemap table for one memory mapping for given pid - AD-HOC
-pagemap_t * get_mapping_pgmap(int pid, unsigned long start, unsigned long end, int flags);
+pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end, int flags);
 
 // return single pagemap table for physical memory mapping
 // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag
 pagemap_t * get_physical_pgmap(unsigned long start, unsigned long end, int flags);
 
+// it returns all proc_t step by step
+pagemap_t * iterate_over_all(pagemap_tbl * table);
+
+// returns array of all pids on system
+pagemap_t * get_pids_from_table(pagemap_tbl * table);
+
 // BIT_SET(num,index)
 #define BIT_SET(x,n) ((1LL << n) & x)
 
 // BIT_VAL(num,most_right_index,num_of_bytes)
-#define BIT_VAL(x,i,n) ((x >> i) & ((1LL << (bits) + 1) - 1))
+#define BIT_VAL(x,i,n) (((x) >> (i)) & (((1LL << ((n) + 1))) - 1))
