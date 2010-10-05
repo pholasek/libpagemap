@@ -2,12 +2,12 @@ typedef struct proc_mapping {
     unsigned long start, end, offset;
     unsigned long * pfns;
     int perms;
+    struct proc_mapping * next;
 } proc_mapping;
 
 typedef struct pagemap_t {
     int pid;
     proc_mapping * mappings;
-    int num_mappings;
    // non-kpageflags counts
     unsigned long uss;      // number of pages of uss memory
     unsigned long pss;      // number of pages of pss memory
@@ -53,6 +53,7 @@ typedef struct pagemap_list {
 typedef struct kpagemap_t {
     int kpgm_count_fd;
     int kpgm_flags_fd;
+    int under_root;
     long pagesize;
 } kpagemap_t;
 
@@ -99,20 +100,19 @@ pagemap_t * get_pid_from_table(pagemap_tbl * table);
 void close_pgmap_table(pagemap_tbl * table);
 
 // return single pagemap table for one pid - AD-HOC
-pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid, int flags);
+pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid);
 
 // return sigle pagemap table for one memory mapping for given pid - AD-HOC
-pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end, int flags);
+pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end);
 
 // return single pagemap table for physical memory mapping
 // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag
-pagemap_t * get_physical_pgmap(unsigned long start, unsigned long end, int flags);
+pagemap_t * get_physical_pgmap(pagemap_tbl * table, unsigned long start, unsigned long end, int flags);
 
-// it returns all proc_t step by step
+// it returns all proc_t step by step, return NULL at the end
 pagemap_t * iterate_over_all(pagemap_tbl * table);
 
-// returns array of all pids on system
-pagemap_t * get_pids_from_table(pagemap_tbl * table);
+void reset_table_pos(pagemap_tbl * table);
 
 // BIT_SET(num,index)
 #define BIT_SET(x,n) ((1LL << n) & x)

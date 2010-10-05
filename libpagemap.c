@@ -13,6 +13,8 @@
 
 #include "libpagemap.h"
 
+#define DEBUG 1
+
 static void trace(const char * string) {
 #ifdef DEBUG
     fprintf(stderr, "%s\n", string);
@@ -26,25 +28,23 @@ static pagemap_t * alloc_one_tb(void) {
     return p;
 }
 
-static kpagemap_t * open_kpagemap(kpagemap_t * kpagemap) {
-    kpagemap = malloc(sizeof(kpagemap_t));
-    if (kpagemap == NULL) {
-        free(kpagemap);
-        return NULL;
-    }
-    kpagemap->kpgm_count_fd = open("/proc/kpagecount",O_RDONLY);
-    if (kpagemap->kpgm_count_fd < 0) {
-        free(kpagemap);
-        return NULL;
-    }
-    kpagemap->kpgm_count_fd = open("/proc/kpageflags",O_RDONLY);
-    if (kpagemap->kpgm_flags_fd < 0) {
-        close(kpagemap->kpgm_count_fd);
-        free(kpagemap);
-        return NULL;
+static int open_kpagemap(kpagemap_t * kpagemap) {
+    if (getuid() == 0) {
+        kpagemap->kpgm_count_fd = open("/proc/kpagecount",O_RDONLY);
+        if (kpagemap->kpgm_count_fd < 0) {
+            return ERROR;
+        }
+        kpagemap->kpgm_count_fd = open("/proc/kpageflags",O_RDONLY);
+        if (kpagemap->kpgm_flags_fd < 0) {
+            close(kpagemap->kpgm_count_fd);
+            return ERROR;
+        }
+        kpagemap->under_root = 1;
+    } else {
+        kpagemap->under_root = 0;
     }
     kpagemap->pagesize = sysconf(_SC_PAGESIZE);
-    return kpagemap;
+    return OK;
 }
 
 static void close_kpagemap(kpagemap_t * kpagemap) {
@@ -102,16 +102,16 @@ static pagemap_list * search_pid(int s_pid, pagemap_tbl * table) {
 static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
     pagemap_list * curr;
 
-    if (!table)
+    if (!table) {
         table = malloc(sizeof(pagemap_tbl));
-        if (!table->start)
+        if (!table)
             return NULL;
+    }
     if (!table->start) {
         table->start = malloc(sizeof(pagemap_list));
         if (!table->start)
             return NULL;
         table->start->pid_table.pid = n_pid;
-        table->start->pid_table.num_mappings = 0;
         table->start->next = NULL;
         table->curr = table->start;
         table->size = 0;
@@ -126,7 +126,6 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
                 return NULL;
             curr = curr->next;
             curr->pid_table.pid = n_pid;
-            curr->pid_table.num_mappings = 0;
             curr->next = NULL;
             return curr;
         } else
@@ -141,47 +140,40 @@ static proc_mapping * read_maps(pagemap_t * p_t) {
     char path[BUFSIZE];
     char line[BUFSIZE];
     char permiss[5];
-    proc_mapping * new;
-    int num_lines = 0,i = 0;
+    proc_mapping * new = NULL , * p = NULL;
 
     snprintf(path,BUFSIZE,"/proc/%d/maps",p_t->pid);
     maps_fd = fopen(path,"r");
     if (!maps_fd)
         return NULL;
     while (fgets(line,BUFSIZE,maps_fd)) {
-        num_lines++;
-        if (num_lines >= p_t->num_mappings) {
-            p_t->num_mappings *= 2;
-            new = realloc(p_t->mappings,sizeof(proc_mapping)*p_t->num_mappings);
-            i = 0;
-            // copy old array
-            while (i < num_lines) {
-                new[i].start = p_t->mappings[i].start;
-                new[i].end = p_t->mappings[i].end;
-                new[i].offset = p_t->mappings[i].offset;
-                new[i].pfns = p_t->mappings[i].pfns;
-                new[i].perms = p_t->mappings[i].perms;
-                i++;
-            }
-            free(p_t->mappings);
-            p_t->mappings = new;
-        }
+        new = malloc(sizeof(proc_mapping));
         sscanf(line,"%lx-%lx %s %lx %*s %*d %*s",
-                &p_t->mappings[num_lines].start,
-                &p_t->mappings[num_lines].end,
+                &new->start,
+                &new->end,
                 permiss,
-                &p_t->mappings[num_lines].offset);
-        p_t->mappings[num_lines].perms = 0;
+                &new->offset);
+        new->perms = 0;
         if (strchr(permiss,'r'))
-            p_t->mappings[num_lines].perms |= PERM_READ;
+            new->perms |= PERM_READ;
         if (strchr(permiss,'w'))
-            p_t->mappings[num_lines].perms |= PERM_WRITE;
+            new->perms |= PERM_WRITE;
         if (strchr(permiss,'x'))
-            p_t->mappings[num_lines].perms |= PERM_EXEC;
+            new->perms |= PERM_EXEC;
         if (strchr(permiss,'p'))
-            p_t->mappings[num_lines].perms |= PERM_PRIV;
+            new->perms |= PERM_PRIV;
         if (strchr(permiss,'s'))
-            p_t->mappings[num_lines].perms |= PERM_SHARE;
+            new->perms |= PERM_SHARE;
+        new->next = NULL;
+
+        if (!p_t->mappings)
+            p_t->mappings = new;
+        else {
+            p = p_t->mappings;
+            while (p->next != NULL)
+                p = p->next;
+            p->next = new;
+        }
     }
     fclose(maps_fd);
     return p_t->mappings;
@@ -192,18 +184,25 @@ static pagemap_tbl * fill_mappings(pagemap_tbl * table) {
 
     reset_pos(table);
     while ((tmp = pid_iter(table))) {
-        read_maps(&(tmp->pid_table));
+        if (read_maps(&(tmp->pid_table)) == NULL)
+            trace("read_maps() error");
     }
     return table;
 }
 
 static void kill_mappings(pagemap_tbl * table) {
     pagemap_list * tmp;
+    proc_mapping * temp;
 
     reset_pos(table);
     while ((tmp = pid_iter(table))) {
-        free(tmp->pid_table.mappings);
-        tmp->pid_table.num_mappings = 0;
+        if (tmp->pid_table.mappings) {
+            do {
+            temp = tmp->pid_table.mappings;
+            tmp->pid_table.mappings = tmp->pid_table.mappings->next;
+            free(temp);
+            } while (tmp->pid_table.mappings == NULL);
+        }
     }
 }
 
@@ -272,15 +271,15 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
     if (pagemap_fd < 0)
         return ERROR;
     
-    memset(p_t,'\0',sizeof(pagemap_t));
-    for (int i = 0; i < p_t->num_mappings; i++) {
-        for (addr = p_t->mappings[i].start; addr < p_t->mappings[i].end; addr += kpgmap_t->pagesize) {
+    for (proc_mapping * cur = p_t->mappings; cur != NULL; cur = cur->next) {
+        for (addr = cur->start; addr < cur->end; addr += kpgmap_t->pagesize) {
             if ((lseek_ret = lseek64(pagemap_fd, (addr/kpgmap_t->pagesize)*8, SEEK_SET)) == -1){
                 return RD_ERROR;
             }
             if (read(pagemap_fd, data, 8) != 8) /* for vsyscall pages */
             {
-                return RD_ERROR;
+                continue;
+                //return RD_ERROR;
             }
             memcpy(&datanum, data, 8);
             // Swap or physical frame?
@@ -291,39 +290,44 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
                 p_t->swap += 1;
                 continue;
             }
-            // kpagecount's
-            if (lseek64(kpgmap_t->kpgm_count_fd, pfn*8, SEEK_SET) == -1)
-                return RD_ERROR;
-            if (read(kpgmap_t->kpgm_count_fd, data, 8) != 8)
-                return RD_ERROR;
-            memcpy(&datanum, data, 8);
-            if (datanum == 0x1)
-                p_t->uss += 1;
-            if (datanum)
-                p_t->pss += (double)1/datanum;
-            // kpageflags's
-            if (lseek64(kpgmap_t->kpgm_flags_fd, pfn*8, SEEK_SET) == -1)
-                return RD_ERROR;
-            if (read(kpgmap_t->kpgm_flags_fd, data, 8) != 8)
-                return RD_ERROR;
-            memcpy(&datanum, data, 8);
-            //     IO stuff 
-            set_flags(p_t, datanum);
+            if (kpgmap_t->under_root == 1) {
+                // kpagecount's
+                if (lseek64(kpgmap_t->kpgm_count_fd, pfn*8, SEEK_SET) == -1)
+                    return RD_ERROR;
+                if (read(kpgmap_t->kpgm_count_fd, data, 8) != 8)
+                    return RD_ERROR;
+                memcpy(&datanum, data, 8);
+                if (datanum == 0x1)
+                    p_t->uss += 1;
+                if (datanum)
+                    p_t->pss += (double)1/datanum;
+                // kpageflags's
+                if (lseek64(kpgmap_t->kpgm_flags_fd, pfn*8, SEEK_SET) == -1)
+                    return RD_ERROR;
+                if (read(kpgmap_t->kpgm_flags_fd, data, 8) != 8)
+                    return RD_ERROR;
+                memcpy(&datanum, data, 8);
+                //     IO stuff 
+                set_flags(p_t, datanum);
+            }
        }
    }
+   close(pagemap_fd);
    return OK;
 }
 
 static pagemap_tbl * walk_procs(pagemap_tbl * table) {
     pagemap_list * p;
 
-    if (!table)
+    if (!table) {
+        trace("no table in da house");
         return NULL;
+    }
     reset_pos(table);
     while ((p = pid_iter(table))) {
-        if (!(walk_proc_mem(&p->pid_table,&table->kpagemap) != OK)) {
+        if (walk_proc_mem(&p->pid_table,&table->kpagemap) != OK) {
             trace("walk_proc_mem ERROR");
-            return NULL;
+            continue;
         }
     }
     return table;
@@ -349,9 +353,9 @@ static int walk_phys_mem(kpagemap_t * kpagemap) {
             if (sscanf(buffer,"MemTotal: %lu kB",&total_mem) < 1) {
                 fclose(f);
                 return ERROR;
-            }
-            else
+            } else {
                 break;
+            }
         }
     }
     fclose(f);
@@ -359,7 +363,7 @@ static int walk_phys_mem(kpagemap_t * kpagemap) {
         return ERROR;
     p = alloc_one_tb();
     memset(p,'\0',sizeof(pagemap_t));
-   
+
     for (off64_t seek = 0; seek < total_mem/(kpagemap->pagesize)/1024*8; seek += 8) {
         if (lseek64(kpagemap->kpgm_count_fd, seek, SEEK_SET) == -1)
             return RD_ERROR;
@@ -431,8 +435,9 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     if (!proc_dir)
         return NULL;
     while ((proc_ent = readdir(proc_dir))) {
-        if (sscanf(proc_ent->d_name,"%d",&curr_pid) < 1)
+        if (sscanf(proc_ent->d_name,"%d",&curr_pid) == 1) {
             add_pid(curr_pid,table);
+        }
     }
     closedir(proc_dir);
     return table;
@@ -443,17 +448,19 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
     if (pgmap_ver() == ERROR)
         return NULL;
     trace("pgmap_ver()");
-    open_kpagemap(&table->kpagemap);
-    trace("open_kpagemap");
     table = malloc(sizeof(pagemap_tbl));
     if (!table)
         return NULL;
+    trace("allocating of table");
+    if (open_kpagemap(&table->kpagemap) == ERROR)
+        return NULL;
+    trace("open_kpagemap");
     if(!walk_procdir(table))
         return NULL;
     trace("walk_procdir");
     return table;
 }
-    
+
 pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int flags) {
     fill_mappings(table);
     trace("fill_mappings");
@@ -465,12 +472,38 @@ pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int flags) {
 
 void close_pgmap_table(pagemap_tbl * table) {
     kill_tables(table);
+    trace("kill tables");
+}
+
+// must me used with initialised table
+pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid) 
+{
+    pagemap_list * tmp;
+
+    if (!table)
+        return NULL;
+    if (!(tmp = search_pid(pid,table)))
+        return NULL;
+    else
+        return &tmp->pid_table;
 }
 
 //TODO:
-pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid, int flags) { return NULL; }
-pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end, int flags) {return NULL; } 
-pagemap_t * get_physical_pgmap(unsigned long start, unsigned long end, int flags) { return NULL; }
-pagemap_t * iterate_over_all(pagemap_tbl * table) { return NULL; }
-pagemap_t * get_pids_from_table(pagemap_tbl * table) { return NULL; }
+pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end) {return NULL; }
+pagemap_t * get_physical_pgmap(pagemap_tbl * table, unsigned long start, unsigned long end, int flags) { return NULL; /*verify under_root flag*/ }
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/* Every single-call return pagemap_t, NULL at the end */
+pagemap_t * iterate_over_all(pagemap_tbl * table)
+{
+    pagemap_list * tmp;
+    tmp = pid_iter(table);
+
+    return &tmp->pid_table;
+}
+
+void reset_table_pos(pagemap_tbl * table)
+{
+    reset_pos(table);
+}
 
