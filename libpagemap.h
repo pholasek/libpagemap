@@ -1,3 +1,6 @@
+/* PUT GPL license */
+
+
 typedef struct proc_mapping {
     unsigned long start, end, offset;
     unsigned long * pfns;
@@ -102,12 +105,9 @@ void close_pgmap_table(pagemap_tbl * table);
 // return single pagemap table for one pid - AD-HOC
 pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid);
 
-// return sigle pagemap table for one memory mapping for given pid - AD-HOC
-pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end);
-
 // return single pagemap table for physical memory mapping
 // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag
-pagemap_t * get_physical_pgmap(pagemap_tbl * table, unsigned long start, unsigned long end, int flags);
+int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned long * free, unsigned long * nonshared);
 
 // it returns all proc_t step by step, return NULL at the end
 pagemap_t * iterate_over_all(pagemap_tbl * table);
@@ -117,5 +117,21 @@ void reset_table_pos(pagemap_tbl * table);
 // BIT_SET(num,index)
 #define BIT_SET(x,n) ((1LL << n) & x)
 
-// BIT_VAL(num,most_right_index,num_of_bytes)
-#define BIT_VAL(x,i,n) (((x) >> (i)) & (((1LL << ((n) + 1))) - 1))
+/*
+ * Couple of macros from
+ * fs/proc/task_mmu.c
+ */
+#define PM_ENTRY_BYTES      sizeof(uint64_t)
+#define PM_STATUS_BITS      3
+#define PM_STATUS_OFFSET    (64 - PM_STATUS_BITS)
+#define PM_STATUS_MASK      (((1LL << PM_STATUS_BITS) - 1) << PM_STATUS_OFFSET)
+#define PM_STATUS(nr)       (((nr) << PM_STATUS_OFFSET) & PM_STATUS_MASK)
+#define PM_PSHIFT_BITS      6
+#define PM_PSHIFT_OFFSET    (PM_STATUS_OFFSET - PM_PSHIFT_BITS)
+#define PM_PSHIFT_MASK      (((1LL << PM_PSHIFT_BITS) - 1) << PM_PSHIFT_OFFSET)
+#define PM_PSHIFT(x)        (((u64) (x) << PM_PSHIFT_OFFSET) & PM_PSHIFT_MASK)
+#define PM_PFRAME_MASK      ((1LL << PM_PSHIFT_OFFSET) - 1)
+#define PM_PFRAME(x)        ((x) & PM_PFRAME_MASK)
+
+#define PM_PRESENT          PM_STATUS(4LL)
+#define PM_SWAP             PM_STATUS(2LL)

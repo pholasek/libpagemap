@@ -1,3 +1,7 @@
+/* PUT GPL license */
+
+// TODO: flags are sentenced to death
+
 #define _LARGEFILE64_SOURCE
 
 #include <stdio.h>
@@ -34,7 +38,7 @@ static int open_kpagemap(kpagemap_t * kpagemap) {
         if (kpagemap->kpgm_count_fd < 0) {
             return ERROR;
         }
-        kpagemap->kpgm_count_fd = open("/proc/kpageflags",O_RDONLY);
+        kpagemap->kpgm_flags_fd = open("/proc/kpageflags",O_RDONLY);
         if (kpagemap->kpgm_flags_fd < 0) {
             close(kpagemap->kpgm_count_fd);
             return ERROR;
@@ -135,7 +139,7 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
 }
 ////////////////////////////////////////////////////////////////
 
-static proc_mapping * read_maps(pagemap_t * p_t) {
+static int read_maps(pagemap_t * p_t) {
     FILE * maps_fd;
     char path[BUFSIZE];
     char line[BUFSIZE];
@@ -144,10 +148,14 @@ static proc_mapping * read_maps(pagemap_t * p_t) {
 
     snprintf(path,BUFSIZE,"/proc/%d/maps",p_t->pid);
     maps_fd = fopen(path,"r");
-    if (!maps_fd)
-        return NULL;
+    if (!maps_fd) {
+        printf("error maps open in %d\n", p_t->pid);
+        return OK;
+    }
     while (fgets(line,BUFSIZE,maps_fd)) {
         new = malloc(sizeof(proc_mapping));
+        if (!new)
+            return ERROR;
         sscanf(line,"%lx-%lx %s %lx %*s %*d %*s",
                 &new->start,
                 &new->end,
@@ -176,7 +184,7 @@ static proc_mapping * read_maps(pagemap_t * p_t) {
         }
     }
     fclose(maps_fd);
-    return p_t->mappings;
+    return OK;
 }
 
 static pagemap_tbl * fill_mappings(pagemap_tbl * table) {
@@ -184,7 +192,7 @@ static pagemap_tbl * fill_mappings(pagemap_tbl * table) {
 
     reset_pos(table);
     while ((tmp = pid_iter(table))) {
-        if (read_maps(&(tmp->pid_table)) == NULL)
+        if (read_maps(&(tmp->pid_table)) != OK)
             trace("read_maps() error");
     }
     return table;
@@ -201,7 +209,7 @@ static void kill_mappings(pagemap_tbl * table) {
             temp = tmp->pid_table.mappings;
             tmp->pid_table.mappings = tmp->pid_table.mappings->next;
             free(temp);
-            } while (tmp->pid_table.mappings == NULL);
+            } while (tmp->pid_table.mappings != NULL);
         }
     }
 }
@@ -263,17 +271,21 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
     char data[8];
     char pagemap_p[BUFSIZE];
     off64_t lseek_ret;
-    unsigned long addr;
     uint64_t datanum,pfn;
+    double pss = 0.0;
 
     sprintf(pagemap_p,"/proc/%d/pagemap",p_t->pid);
     pagemap_fd = open(pagemap_p,O_RDONLY);
-    if (pagemap_fd < 0)
+    if (pagemap_fd < 0) {
+        printf("error pagemap open in %d\n", p_t->pid);
         return ERROR;
-    
+    }
+
     for (proc_mapping * cur = p_t->mappings; cur != NULL; cur = cur->next) {
-        for (addr = cur->start; addr < cur->end; addr += kpgmap_t->pagesize) {
-            if ((lseek_ret = lseek64(pagemap_fd, (addr/kpgmap_t->pagesize)*8, SEEK_SET)) == -1){
+        for (uint64_t addr = cur->start; addr < cur->end; addr += kpgmap_t->pagesize) {
+            if ((lseek_ret = lseek64(pagemap_fd, (addr/kpgmap_t->pagesize)*8, SEEK_SET)) == (off64_t) -1) {
+                close(pagemap_fd);
+                trace("pagemap seek error");
                 return RD_ERROR;
             }
             if (read(pagemap_fd, data, 8) != 8) /* for vsyscall pages */
@@ -283,41 +295,56 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
             }
             memcpy(&datanum, data, 8);
             // Swap or physical frame?
-            if (BIT_SET(datanum,63)) {
-                pfn = BIT_VAL(datanum,54,54);
-                p_t->res += 1;
-            } else {
+            if (datanum & PM_SWAP) {
                 p_t->swap += 1;
                 continue;
             }
+            if (!(datanum & PM_PRESENT)) {
+                continue;
+            }
+            pfn = PM_PFRAME(datanum);
+            p_t->res += 1;
             if (kpgmap_t->under_root == 1) {
                 // kpagecount's
-                if (lseek64(kpgmap_t->kpgm_count_fd, pfn*8, SEEK_SET) == -1)
+                if (lseek64(kpgmap_t->kpgm_count_fd, pfn*8, SEEK_SET) == -1) {
+                    close(pagemap_fd);
                     return RD_ERROR;
-                if (read(kpgmap_t->kpgm_count_fd, data, 8) != 8)
+                }
+                if (read(kpgmap_t->kpgm_count_fd, data, 8) != 8) {
+                    close(pagemap_fd);
                     return RD_ERROR;
+                }
                 memcpy(&datanum, data, 8);
-                if (datanum == 0x1)
+                if (datanum == 0x1) {
                     p_t->uss += 1;
-                if (datanum)
-                    p_t->pss += (double)1/datanum;
+                }
+                else
+                    p_t->shr += 1;
+                if (datanum) //for sure
+                    pss += 1/(double)datanum;
                 // kpageflags's
-                if (lseek64(kpgmap_t->kpgm_flags_fd, pfn*8, SEEK_SET) == -1)
+                if (lseek64(kpgmap_t->kpgm_flags_fd, pfn*8, SEEK_SET) == -1) {
+                    close(pagemap_fd);
                     return RD_ERROR;
-                if (read(kpgmap_t->kpgm_flags_fd, data, 8) != 8)
+                }
+                if (read(kpgmap_t->kpgm_flags_fd, data, 8) != 8) {
+                    close(pagemap_fd);
                     return RD_ERROR;
+                }
                 memcpy(&datanum, data, 8);
-                //     IO stuff 
+                // flags stuff
                 set_flags(p_t, datanum);
             }
        }
    }
+   p_t->pss = (uint64_t)pss;
    close(pagemap_fd);
    return OK;
 }
 
 static pagemap_tbl * walk_procs(pagemap_tbl * table) {
     pagemap_list * p;
+    int debug;
 
     if (!table) {
         trace("no table in da house");
@@ -325,34 +352,31 @@ static pagemap_tbl * walk_procs(pagemap_tbl * table) {
     }
     reset_pos(table);
     while ((p = pid_iter(table))) {
-        if (walk_proc_mem(&p->pid_table,&table->kpagemap) != OK) {
+        if ((debug = walk_proc_mem(&p->pid_table,&table->kpagemap)) != OK) {
             trace("walk_proc_mem ERROR");
-            continue;
         }
     }
     return table;
 }
 
-static int walk_phys_mem(kpagemap_t * kpagemap) {
+static int walk_phys_mem(kpagemap_t * kpagemap, unsigned long * shared, unsigned long * free, unsigned long * nonshared)
+{
     uint64_t datanum_cnt;
-    uint64_t datanum_flg;
-    uint64_t pfn;
     char data[8];
     FILE * f;
     char buffer[BUFSIZE];
     unsigned long total_mem = 0;
-    pagemap_t * p = NULL;
 
     // how to determine amount of physmemory ?
     // parse from /proc/meminfo
     f = fopen("/proc/meminfo","r");
     if (!f)
-        return ERROR;
+        return RD_ERROR;
     while(fgets(buffer,BUFSIZE,f)) {
         if (strstr(buffer,"MemTotal")) {
             if (sscanf(buffer,"MemTotal: %lu kB",&total_mem) < 1) {
                 fclose(f);
-                return ERROR;
+                return RD_ERROR;
             } else {
                 break;
             }
@@ -361,35 +385,22 @@ static int walk_phys_mem(kpagemap_t * kpagemap) {
     fclose(f);
     if (total_mem == 0)
         return ERROR;
-    p = alloc_one_tb();
-    memset(p,'\0',sizeof(pagemap_t));
+    printf("%lu\n", total_mem);
 
-    for (off64_t seek = 0; seek < total_mem/(kpagemap->pagesize)/1024*8; seek += 8) {
+    for (off64_t seek = 0; seek < total_mem*1024/kpagemap->pagesize*8; seek += 8) {
         if (lseek64(kpagemap->kpgm_count_fd, seek, SEEK_SET) == -1)
             return RD_ERROR;
         if (read(kpagemap->kpgm_count_fd, data, 8) != 8)
             return RD_ERROR;
         memcpy(&datanum_cnt, data, 8);
-        if (lseek64(kpagemap->kpgm_count_fd, seek, SEEK_SET) == -1)
-            return RD_ERROR;
-        if (read(kpagemap->kpgm_count_fd, data, 8) != 8)
-            return RD_ERROR;
-        memcpy(&datanum_flg, data, 8);
 
-        if (BIT_SET(datanum_flg,63)) {
-            pfn = BIT_VAL(datanum_flg,54,54);
-            p->res += 1;
-        } else {
-            p->swap += 1;
-            continue;
-        }
         // kpagecount's
         if (datanum_cnt == 0x1)
-            p->uss += 1;
-        if (datanum_cnt)
-            p->pss += (double)1/datanum_cnt;
-        // kpageflags's
-        set_flags(p,datanum_flg);
+            *nonshared += 1;
+        if (datanum_cnt > 0x1)
+            *shared += 1;
+        if (datanum_cnt == 0x0)
+            *free += 1;
     }
     return OK;
 }
@@ -443,7 +454,9 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     return table;
 }
 
-// external interface /////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// external interface ////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
     if (pgmap_ver() == ERROR)
         return NULL;
@@ -488,10 +501,20 @@ pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid)
         return &tmp->pid_table;
 }
 
-//TODO:
-pagemap_t * get_mapping_pgmap(pagemap_tbl * table, int pid, unsigned long start, unsigned long end) {return NULL; }
-pagemap_t * get_physical_pgmap(pagemap_tbl * table, unsigned long start, unsigned long end, int flags) { return NULL; /*verify under_root flag*/ }
-///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// must be used above opened table
+int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned long * free, unsigned long * nonshared)
+{
+    if (!table)
+        return ERROR;
+    if (table->kpagemap.under_root != 1) {
+        return ERROR;
+    } else {
+        *shared = 0;
+        *free = 0;
+        *nonshared = 0;
+        return walk_phys_mem(&table->kpagemap, shared, free, nonshared);
+    }
+}
 
 /* Every single-call return pagemap_t, NULL at the end */
 pagemap_t * iterate_over_all(pagemap_tbl * table)
