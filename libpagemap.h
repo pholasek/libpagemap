@@ -99,11 +99,17 @@ pagemap_t * iterate_over_all(pagemap_tbl * table);
 // get exactly one pid from table
 pagemap_t * get_pid_from_table(pagemap_tbl * table);
 
+// return array of all_pids
+pagemap_t ** get_all_procs(pagemap_tbl * table);
+
 // close pagemap tables and free them
 void close_pgmap_table(pagemap_tbl * table);
 
 // return single pagemap table for one pid - AD-HOC
 pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid);
+
+// return array of pointers to proc_tables - useful for sorting
+pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size);
 
 // return single pagemap table for physical memory mapping
 // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag

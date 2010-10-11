@@ -8,11 +8,16 @@ int main(void) {
     pagemap_t * tmp = NULL;
     unsigned long free,shared,nonshared;
 
+    if (getuid() != 0) {
+        fprintf(stderr, "Please use root in this case");
+        return 1;
+    }
+
     if ((table = init_pgmap_table(table)) == NULL) {
         printf("INIT ERROR");
         return 1;
     }
-    /*if (!open_pgmap_table(table,0x0)) {
+    if (!open_pgmap_table(table,0x0)) {
         printf("OPEN ERROR");
         return 1;
     }
@@ -31,9 +36,9 @@ int main(void) {
                 tmp->n_wback*4,
                 tmp->n_err*4
                 );
-    }*/
+    }
     printf("%d\n", get_physical_pgmap(table,&shared,&free,&nonshared));
-    printf("shared: %lu free: %lu nonshared:%lu\n", shared*4, free*4, nonshared*4);
+    printf("Memory stats in kB - shared: %lu free: %lu nonshared:%lu\n", shared*4, free*4, nonshared*4);
     close_pgmap_table(table);
 
     return 0;

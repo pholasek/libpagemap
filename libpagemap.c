@@ -445,9 +445,11 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     proc_dir = opendir("/proc");
     if (!proc_dir)
         return NULL;
+    table->size = 0;
     while ((proc_ent = readdir(proc_dir))) {
         if (sscanf(proc_ent->d_name,"%d",&curr_pid) == 1) {
             add_pid(curr_pid,table);
+            table->size += 1;
         }
     }
     closedir(proc_dir);
@@ -489,7 +491,7 @@ void close_pgmap_table(pagemap_tbl * table) {
 }
 
 // must me used with initialised table
-pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid) 
+pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid)
 {
     pagemap_list * tmp;
 
@@ -499,6 +501,25 @@ pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid)
         return NULL;
     else
         return &tmp->pid_table;
+}
+
+// user is responsible for cleaning-up :)
+pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size)
+{
+    pagemap_t ** arr = NULL;
+    pagemap_t * p = NULL;
+    int cnt = 0;
+    *size = table->size;
+    arr = malloc(table->size*sizeof(pagemap_t*));
+    if (!arr)
+        return NULL;
+    reset_pos(table);
+    while ((p = iterate_over_all(table)) && cnt < table->size) {
+        arr[cnt] = p;
+        cnt++;
+    }
+    reset_pos(table);
+    return arr;
 }
 
 // must be used above opened table
@@ -516,7 +537,7 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
     }
 }
 
-/* Every single-call return pagemap_t, NULL at the end */
+// Every single-call return pagemap_t, NULL at the end
 pagemap_t * iterate_over_all(pagemap_tbl * table)
 {
     pagemap_list * tmp;
@@ -530,3 +551,4 @@ void reset_table_pos(pagemap_tbl * table)
     reset_pos(table);
 }
 
+//
