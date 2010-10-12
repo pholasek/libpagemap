@@ -1,5 +1,22 @@
 /* PUT GPL license */
 
+#define PERM_WRITE      0x0100
+#define PERM_READ       0x0200
+#define PERM_EXEC       0x0400
+#define PERM_SHARE      0x0800
+#define PERM_PRIV       0x1000
+
+#define PAGEMAP_COUNTS  0x0001  // non-kpageflags stuff
+#define PAGEMAP_IO      0x0002  // IO stats  
+#define PAGEMAP_VARIOUS 0x0004  // various stats
+#define PAGEMAP_LRU     0x0008  // LRU-related stats
+#define PAGEMAP_ROOT    0x0010  // without this internal flag we can count only res and swap
+                                // it is set if getuid() == 0
+#define BUFSIZE         512
+#define SMALLBUF        128
+#define OK              0
+#define ERROR           1
+#define RD_ERROR        2
 
 typedef struct proc_mapping {
     unsigned long start, end, offset;
@@ -11,6 +28,7 @@ typedef struct proc_mapping {
 typedef struct pagemap_t {
     int pid;
     proc_mapping * mappings;
+    char cmdline[SMALLBUF];
    // non-kpageflags counts
     unsigned long uss;      // number of pages of uss memory
     unsigned long pss;      // number of pages of pss memory
@@ -43,7 +61,7 @@ typedef struct pagemap_t {
     unsigned long n_unevctb;    // number of unevictable pages 
     unsigned long n_referenced; // number of pages which were referenced since last LRU
                                     // enqueue/requeue
-    unsigned long n_2recycle;   // number of pages which are assigned to recycling
+    unsigned long n_recycle;   // number of pages which are assigned to recycling
 } pagemap_t;
 
 /////////// TO BE OPTIMIZED TO SOMETHING FASTER /////////////
@@ -69,23 +87,6 @@ typedef struct pagemap_tbl {
 } pagemap_tbl;
 
 
-#define PERM_WRITE      0x0100
-#define PERM_READ       0x0200
-#define PERM_EXEC       0x0400
-#define PERM_SHARE      0x0800
-#define PERM_PRIV       0x1000
-
-#define PAGEMAP_COUNTS  0x0001  // non-kpageflags stuff
-#define PAGEMAP_IO      0x0002  // IO stats  
-#define PAGEMAP_VARIOUS 0x0004  // various stats
-#define PAGEMAP_LRU     0x0008  // LRU-related stats
-#define PAGEMAP_ROOT    0x0010  // without this internal flag we can count only res and swap
-                                // it is set if getuid() == 0
-#define BUFSIZE         512
-#define SMALLBUF        128
-#define OK              0
-#define ERROR           1
-#define RD_ERROR        2
 
 // alloc all pagemap tables and initialize them and alloc kpagemap_t
 pagemap_tbl * init_pgmap_table(pagemap_tbl * table);

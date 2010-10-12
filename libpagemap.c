@@ -139,6 +139,35 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
     return NULL;
 }
 ////////////////////////////////////////////////////////////////
+static int read_cmd(pagemap_t * p_t) {
+    int cmdline_fd = -1;
+    char path[BUFSIZE];
+    int size;
+
+    snprintf(path,SMALLBUF,"/proc/%d/cmdline",p_t->pid);
+    cmdline_fd = open(path,O_RDONLY);
+    if (cmdline_fd < 0)
+        return RD_ERROR;
+    if ((size = read(cmdline_fd, p_t->cmdline, SMALLBUF-1)) >= 0) {
+        path[size] = '\0';
+    } else {
+        close(cmdline_fd);
+        return RD_ERROR;
+    }
+    close(cmdline_fd);
+    return OK;
+}
+
+static pagemap_tbl * fill_cmdlines(pagemap_tbl * table) {
+    pagemap_list * tmp;
+
+    reset_pos(table);
+    while ((tmp = pid_iter(table))) {
+        if (read_cmd(&(tmp->pid_table)) != OK)
+            trace("read_cmd() error");
+    }
+    return table;
+}
 
 static int read_maps(pagemap_t * p_t) {
     FILE * maps_fd;
@@ -150,7 +179,7 @@ static int read_maps(pagemap_t * p_t) {
     snprintf(path,BUFSIZE,"/proc/%d/maps",p_t->pid);
     maps_fd = fopen(path,"r");
     if (!maps_fd) {
-        printf("error maps open in %d\n", p_t->pid);
+        trace("error maps open ");
         return OK;
     }
     while (fgets(line,BUFSIZE,maps_fd)) {
@@ -263,7 +292,7 @@ static pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
     if (BIT_SET(datanum,2))
         p_t->n_referenced += 1;
     if (BIT_SET(datanum,9))
-        p_t->n_2recycle += 1;
+        p_t->n_recycle += 1;
     return p_t;
 }
 
@@ -278,7 +307,7 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
     sprintf(pagemap_p,"/proc/%d/pagemap",p_t->pid);
     pagemap_fd = open(pagemap_p,O_RDONLY);
     if (pagemap_fd < 0) {
-        printf("error pagemap open in %d\n", p_t->pid);
+        trace("error pagemap open");
         return ERROR;
     }
 
@@ -479,6 +508,8 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
 pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int flags) {
     fill_mappings(table);
     trace("fill_mappings");
+    fill_cmdlines(table);
+    trace("fill_cmdlines");
     if (!walk_procs(table))
         return NULL;
     trace("walk_procs");
