@@ -16,7 +16,7 @@
                       "n_anon,n_swpche,n_swpbck,n_onlru,n_atclru,n_unevctb," \
                       "n_referenced,n_2recycle"
 
-#define STAT_ROW      "*** free: %lu kB, shared: %lu kB, nonshared: %lu kB ***\n"
+#define STAT_ROW      "*** total: %lu kB, free: %lu kB, shared: %lu kB, nonshared: %lu kB ***\n"
 
 #define DEF_PRINT(item) \
     unsigned long get_ ## item(pagemap_t * table) \
@@ -68,13 +68,7 @@ DEF_PRINT(n_uptd);
 DEF_PRINT(n_wback);
 DEF_PRINT(n_2recycle);
 
-static header_t head_tbl[]={{"PID",    "pid",            5, get_pid     },
-                            {"USS",    "uss",            7, get_uss     },
-                            {"PSS",    "pss",            7, get_pss     },
-                            {"SWAP",   "swap",           7, get_swap    },
-                            {"RES",    "res",            7, get_res        },
-                            {"SHR",    "shr",            7, get_shr        },
-                            {"ACTLRU", "n_actlru",       7, get_n_actlru   },
+static header_t head_tbl[]={{"ACTLRU", "n_actlru",       7, get_n_actlru   },
                             {"ANON",   "n_anon",         7, get_n_anon     },
                             {"BUDDY",  "n_buddy",        7, get_n_buddy    },
                             {"CMPNDH", "n_cmpndh",       7, get_n_cmpndh   },
@@ -95,7 +89,13 @@ static header_t head_tbl[]={{"PID",    "pid",            5, get_pid     },
                             {"UNEVCTB","n_unevctb",      7, get_n_unevctb  },
                             {"UPTD",   "n_uptd",         7, get_n_uptd     },
                             {"WBACK",  "n_wback",        7, get_n_wback    },
-                            {"RECYCLE","n_2recycle",     7, get_n_2recycle } };
+                            {"RECYCLE","n_2recycle",     7, get_n_2recycle },
+                            {"PID",    "pid",            5, get_pid        },
+                            {"PSS",    "pss",            7, get_pss        },
+                            {"RES",    "res",            7, get_res        },
+                            {"SHR",    "shr",            7, get_shr        },
+                            {"SWAP",   "swap",           7, get_swap       },
+                            {"USS",    "uss",            7, get_uss        }};
 
 static int head_tbl_s = sizeof(head_tbl)/sizeof(header_t);
 
@@ -174,7 +174,7 @@ header_list * make_header(const char * src) {
     header_t * res;
     header_t key;
 
-    strcpy((src_string = malloc(strlen(str)+1)),src);
+    strcpy((src_string = malloc(strlen(src)+1)),src);
     p = strtok(src_string,",");
     if (p)
         start = malloc(sizeof(header_list));
@@ -182,17 +182,23 @@ header_list * make_header(const char * src) {
         key.name = p;
         res = bsearch(&key,head_tbl,head_tbl_s,sizeof(header_t),comp_heads);
         if (res) {
-           temp = malloc(sizeof(header_list)); 
-           memcpy(&temp,res,sizeof(header_t));
+           temp = (header_list *) malloc(sizeof(header_list));
+           memcpy(&temp->item,res,sizeof(header_t));
            temp->next = NULL;
+           point = start;
+           while (point->next) {
+               point = point->next;
+           }
+           point->next = temp;
+           p = strtok(NULL,",");
+        } else {
+            return NULL;
         }
-        point = start;
-        while (point->next) {
-            point = point->next;
-        }
-        point->next = temp;
-        p = strtok(NULL,",");
     }
+    point = start;
+    start = start->next;
+    free(point);
+    free(src_string);
     return start;
 }
 
@@ -220,7 +226,7 @@ header_list * complete_header(void) {
 void destroy_header(header_list * list) {
     header_list * curr;
 
-    if (!list) {
+    if (list) {
         curr = list;
     }
     while (list) {
@@ -231,12 +237,18 @@ void destroy_header(header_list * list) {
 }
 
 // with first argument NULL, prints headers
-void print_row(pagemap_t * table, header_list * head_l) 
+void print_row(pagemap_t * table, header_list * head_l)
 {
     header_list * curr;
+    int psize_c;
 
     curr = head_l;
 
+    if (p_arg) {
+        psize_c = 1;
+    } else {
+        psize_c = getpagesize() >> 10;
+    }
     if (!table) {
         //print header
         while(curr) {
@@ -245,7 +257,7 @@ void print_row(pagemap_t * table, header_list * head_l)
         }
     } else {
         while(curr) {
-            printf("%lu ", curr->item.prfun(table));
+            printf("%lu ", curr->item.prfun(table)*psize_c);
             curr = curr->next;
         }
     }
@@ -255,15 +267,20 @@ void print_row(pagemap_t * table, header_list * head_l)
 void print_stats(pagemap_tbl * table)
 {
     unsigned long free, shared, nonshared;
+    long pagesize;
 
+    pagesize = getpagesize() >> 10; // kB need
     if (get_physical_pgmap(table, &shared, &free, &nonshared) == OK) {
-        printf(STAT_ROW, free, shared, nonshared);
+        printf(STAT_ROW, free*pagesize+shared*pagesize+nonshared*pagesize,
+                free*pagesize, shared*pagesize, nonshared*pagesize);
     }
 }
 
 void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
 {
     int i = 0;
+
+    print_row(NULL, head_l);
     while (i < size) {
         print_row(table_arr[i], head_l);
         ++i;
@@ -278,7 +295,6 @@ int main(int argc, char * argv[])
     int size,i;
 
     int t = parse_args(argc,argv);
-    printf("%d n%d d%d p%d F%d\n",t,n_arg,d_arg,p_arg,F_arg);
 
     if (!(table = init_pgmap_table(table))) {
         printf("INIT ERROR");
@@ -293,16 +309,14 @@ int main(int argc, char * argv[])
 
     //print data
     hlist = complete_header();
+    if (!hlist)
+        return 1;
     print_stats(table);
     print_data(table_arr, size,hlist);
 
     //close all sources
     close_pgmap_table(table);
     i=0;
-    while (i<size) {
-        free(table_arr[i]);
-        ++i;
-    }
     free(table_arr);
     destroy_header(hlist);
 

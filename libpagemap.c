@@ -18,6 +18,7 @@
 #include "libpagemap.h"
 
 #define DEBUG 1
+#undef DEBUG
 
 static void trace(const char * string) {
 #ifdef DEBUG
@@ -385,7 +386,6 @@ static int walk_phys_mem(kpagemap_t * kpagemap, unsigned long * shared, unsigned
     fclose(f);
     if (total_mem == 0)
         return ERROR;
-    printf("%lu\n", total_mem);
 
     for (off64_t seek = 0; seek < total_mem*1024/kpagemap->pagesize*8; seek += 8) {
         if (lseek64(kpagemap->kpgm_count_fd, seek, SEEK_SET) == -1)
