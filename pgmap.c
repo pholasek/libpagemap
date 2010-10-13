@@ -1,5 +1,6 @@
 /* Put beginning stuff */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -18,11 +19,14 @@
 
 #define STAT_ROW      "*** total: %lu kB, free: %lu kB, shared: %lu kB, nonshared: %lu kB ***\n"
 #define HELP_STR      "pgmap - utility for getting information from kernel's pagemap interface\n" \
-                      "Usage: pgmap [-ndpF]\n " \
-                      "\t -n simulate non-root = only RES and SWAP\n"\
-                      "\t -d without headers\n"\
-                      "\t -p prints numbers in pages (instead of default kB)\n"\
-                      "\t -F prints info from kpageflags file\n\n"
+                      "Usage: pgmap [-ndpFPs]\n " \
+                      "\t -n :simulate non-root = only RES and SWAP\n"\
+                      "\t -d :without headers\n"\
+                      "\t -p :prints numbers in pages (instead of default kB)\n"\
+                      "\t -F :prints info from kpageflags file\n"\
+                      "\t -P pid :prints only specified pid\n"\
+                      "\t -s [uss|pss|shr|res|swap|pid][+-]\n"
+#define BUFFSIZE       128
 
 #define DEF_PRINT(item) \
     static unsigned long get_ ## item(pagemap_t * table) \
@@ -30,11 +34,22 @@
         return table->item; \
     }
 
+#define DEF_CMP(item) \
+    static int cmp_ ## item(pagemap_t ** table1, pagemap_t ** table2) \
+    { \
+        if ((*table1)->item > (*table2)->item) \
+            return 1; \
+        else if ((*table2)->item > (*table1)->item) \
+            return -1; \
+        return 0; \
+    }
+
 typedef struct header_t {
     const char * desc;
     const char * name;
     int width;
-    unsigned long (*prfun)();
+    unsigned long (*prfun)(pagemap_t * table);
+    int (*sortfun)(pagemap_t **, pagemap_t **);
 } header_t;
 
 typedef struct header_list {
@@ -71,41 +86,75 @@ DEF_PRINT(n_uptd);
 DEF_PRINT(n_wback);
 DEF_PRINT(n_recycle);
 
-static char * get_cmdline(pagemap_t * table) {
+DEF_CMP(pid);
+DEF_CMP(uss);
+DEF_CMP(pss);
+DEF_CMP(swap);
+DEF_CMP(res);
+DEF_CMP(shr);
+DEF_CMP(n_actlru);
+DEF_CMP(n_anon);
+DEF_CMP(n_buddy);
+DEF_CMP(n_cmpndh);
+DEF_CMP(n_cmpndt);
+DEF_CMP(n_drt);
+DEF_CMP(n_err);
+DEF_CMP(n_huge);
+DEF_CMP(n_hwpois);
+DEF_CMP(n_ksm);
+DEF_CMP(n_lck);
+DEF_CMP(n_mmap);
+DEF_CMP(n_npage);
+DEF_CMP(n_onlru);
+DEF_CMP(n_referenced);
+DEF_CMP(n_slab);
+DEF_CMP(n_swpche);
+DEF_CMP(n_swpbck);
+DEF_CMP(n_unevctb);
+DEF_CMP(n_uptd);
+DEF_CMP(n_wback);
+DEF_CMP(n_recycle);
+
+static char * get_cmdline(pagemap_t * table) 
+{
     return table->cmdline;
+}
+static int cmp_cmdline(pagemap_t ** table1, pagemap_t ** table2)
+{
+    return strcmp((*table1)->cmdline, (*table2)->cmdline);
 }
 
 // -1 width for strings like cmdline
 
-static header_t head_tbl[]={{"CMD     ",    "cmdline",       -1, get_cmdline    },
-                            {"ACTLRU  ",    "n_actlru",       8, get_n_actlru   },
-                            {"ANON    ",    "n_anon",         8, get_n_anon     },
-                            {"BUDDY   ",    "n_buddy",        8, get_n_buddy    },
-                            {"CMPNDH  ",    "n_cmpndh",       8, get_n_cmpndh   },
-                            {"CMPNDT  ",    "n_cmpndt",       8, get_n_cmpndt   },
-                            {"DRT     ",    "n_drt",          8, get_n_drt      },
-                            {"ERR     ",    "n_err",          8, get_n_err      },
-                            {"HUGE    ",    "n_huge",         8, get_n_huge     },
-                            {"HWPOIS  ",    "n_hwpois",       8, get_n_hwpois   },
-                            {"KSM     ",    "n_ksm",          8, get_n_ksm      },
-                            {"LCK     ",    "n_lck",          8, get_n_lck      },
-                            {"MMAP    ",    "n_mmap",         8, get_n_mmap     },
-                            {"NPAGE   ",    "n_npage",        8, get_n_npage    },
-                            {"ONLRU   ",    "n_onlru",        8, get_n_onlru    },
-                            {"RECYCLE ",    "n_recycle",      8, get_n_recycle  },
-                            {"REF     ",    "n_referenced",   8, get_n_referenced},
-                            {"SLAB    ",    "n_slab",         8, get_n_slab     },
-                            {"SWPBCK  ",    "n_swpbck",       8, get_n_swpbck   },
-                            {"SWPCHE  ",    "n_swpche",       8, get_n_swpche   },
-                            {"UNEVCTB ",    "n_unevctb",      8, get_n_unevctb  },
-                            {"UPTD    ",    "n_uptd",         8, get_n_uptd     },
-                            {"WBACK   ",    "n_wback",        8, get_n_wback    },
-                            {"PID     ",    "pid",            8, get_pid        },
-                            {"PSS     ",    "pss",            8, get_pss        },
-                            {"RES     ",    "res",            8, get_res        },
-                            {"SHR     ",    "shr",            8, get_shr        },
-                            {"SWAP    ",    "swap",           8, get_swap       },
-                            {"USS     ",    "uss",            8, get_uss        }};
+static header_t head_tbl[]={{"CMD     ",    "cmdline",       -1, get_cmdline     ,cmp_cmdline      },
+                            {"ACTLRU  ",    "n_actlru",       8, get_n_actlru    ,cmp_n_actlru     },
+                            {"ANON    ",    "n_anon",         8, get_n_anon      ,cmp_n_anon       },
+                            {"BUDDY   ",    "n_buddy",        8, get_n_buddy     ,cmp_n_buddy      },
+                            {"CMPNDH  ",    "n_cmpndh",       8, get_n_cmpndh    ,cmp_n_cmpndh     },
+                            {"CMPNDT  ",    "n_cmpndt",       8, get_n_cmpndt    ,cmp_n_cmpndt     },
+                            {"DRT     ",    "n_drt",          8, get_n_drt       ,cmp_n_drt        },
+                            {"ERR     ",    "n_err",          8, get_n_err       ,cmp_n_err        },
+                            {"HUGE    ",    "n_huge",         8, get_n_huge      ,cmp_n_huge       },
+                            {"HWPOIS  ",    "n_hwpois",       8, get_n_hwpois    ,cmp_n_hwpois     },
+                            {"KSM     ",    "n_ksm",          8, get_n_ksm       ,cmp_n_ksm        },
+                            {"LCK     ",    "n_lck",          8, get_n_lck       ,cmp_n_lck        },
+                            {"MMAP    ",    "n_mmap",         8, get_n_mmap      ,cmp_n_mmap       },
+                            {"NPAGE   ",    "n_npage",        8, get_n_npage     ,cmp_n_npage      },
+                            {"ONLRU   ",    "n_onlru",        8, get_n_onlru     ,cmp_n_onlru      },
+                            {"RECYCLE ",    "n_recycle",      8, get_n_recycle   ,cmp_n_recycle    },
+                            {"REF     ",    "n_referenced",   8, get_n_referenced,cmp_n_referenced },
+                            {"SLAB    ",    "n_slab",         8, get_n_slab      ,cmp_n_slab       },
+                            {"SWPBCK  ",    "n_swpbck",       8, get_n_swpbck    ,cmp_n_swpbck     },
+                            {"SWPCHE  ",    "n_swpche",       8, get_n_swpche    ,cmp_n_swpche     },
+                            {"UNEVCTB ",    "n_unevctb",      8, get_n_unevctb   ,cmp_n_unevctb    },
+                            {"UPTD    ",    "n_uptd",         8, get_n_uptd      ,cmp_n_uptd       },
+                            {"WBACK   ",    "n_wback",        8, get_n_wback     ,cmp_n_wback      },
+                            {"PID     ",    "pid",            8, get_pid         ,cmp_pid          },
+                            {"PSS     ",    "pss",            8, get_pss         ,cmp_pss          },
+                            {"RES     ",    "res",            8, get_res         ,cmp_res          },
+                            {"SHR     ",    "shr",            8, get_shr         ,cmp_shr          },
+                            {"SWAP    ",    "swap",           8, get_swap        ,cmp_swap         },
+                            {"USS     ",    "uss",            8, get_uss         ,cmp_uss          }};
 
 static int head_tbl_s = sizeof(head_tbl)/sizeof(header_t);
 
@@ -113,6 +162,12 @@ static int n_arg; // it enables non-root version explicitly
 static int d_arg; // prints the result without headers
 static int p_arg; // prints result in numbers of pages (adds pagesize into header)
 static int F_arg; // prints flag stuff too
+static int P_arg; // filter pid with argument
+static int s_arg; // sort results
+static int filter_pid; // pid, which only be shown
+static char sort_id[BUFFSIZE]; // for sort option
+static int (*sort_func)(pagemap_t **, pagemap_t **); //pointer to sorting function
+static int sort_sign; // + or - ?
 // with non-args are all disabled
 
 
@@ -131,49 +186,44 @@ static int comp_heads(const void * h1, const void * h2) {
 // general functions
 static int parse_args(int argc, char * argv[])
 {
-    char * p = NULL;
-    int waitsp = 0;
+    int opt;
+    extern char * optarg;
     // parse
     if (argc == 1) {
         d_arg = 0;
         p_arg = 0;
         F_arg = 0;
+        P_arg = 0;
+        s_arg = 0;
     } else {
-        for (int i = 1; i < argc; i++) {
-            waitsp = 0;
-            p = argv[i];
-            while(*p) {
-                switch (*p) {
-                    case ' ':
-                        waitsp = 0;
-                        break;
-                    case '-':
-                        if (waitsp)
-                            return 1;
-                        break;
-                    case 'n':
-                        n_arg = 1;
-                        waitsp = 1;
-                        break;
-                    case 'd':
-                        d_arg = 1;
-                        waitsp = 1;
-                        break;
-                    case 'p':
-                        p_arg = 1;
-                        waitsp = 1;
-                        break;
-                    case 'F':
-                        F_arg = 1;
-                        waitsp = 1;
-                        break;
-                    case 'h':
-                        print_help();
-                        break;
-                    default:
-                        return 1;
-                }
-                ++p;
+        while((opt = getopt(argc,argv,"ndFpP:s:")) != -1) {
+            switch (opt) {
+                case 'n':
+                    n_arg = 1;
+                    break;
+                case 'd':
+                    d_arg = 1;
+                    break;
+                case 'p':
+                    p_arg = 1;
+                    break;
+                case 'F':
+                    F_arg = 1;
+                    break;
+                case 'h':
+                    print_help();
+                    break;
+                case 'P':
+                    P_arg = 1;
+                    filter_pid = atoi(optarg);
+                    break;
+                case 's':
+                    s_arg = 1;
+                    strncpy(sort_id,optarg,BUFFSIZE-1);
+                    break;
+                default:
+                    print_help();
+                    return 1;
             }
         }
     }
@@ -183,7 +233,7 @@ static int parse_args(int argc, char * argv[])
     return 0;
 }
 
-header_list * make_header(const char * src) {
+static header_list * make_header(const char * src) {
     char * p = NULL;
     char * src_string = NULL;
     header_list * start, * temp, * point;
@@ -219,7 +269,7 @@ header_list * make_header(const char * src) {
     return start;
 }
 
-header_list * add_cmd(header_list * list) {
+static header_list * add_cmd(header_list * list) {
     header_list * end, * new;
 
     if (!list)
@@ -236,7 +286,7 @@ header_list * add_cmd(header_list * list) {
     return list;
 }
 
-header_list * complete_header(void) {
+static header_list * complete_header(void) {
     header_list * p, * end;
 
     if (n_arg) {
@@ -255,7 +305,7 @@ header_list * complete_header(void) {
     return p;
 }
 
-void destroy_header(header_list * list) {
+static void destroy_header(header_list * list) {
     header_list * curr;
 
     if (list) {
@@ -269,7 +319,7 @@ void destroy_header(header_list * list) {
 }
 
 // with first argument NULL, prints headers
-void print_row(pagemap_t * table, header_list * head_l)
+static void print_row(pagemap_t * table, header_list * head_l)
 {
     header_list * curr;
     int psize_c;
@@ -306,7 +356,7 @@ void print_row(pagemap_t * table, header_list * head_l)
     printf("\n");
 }
 
-void print_stats(pagemap_tbl * table)
+static void print_stats(pagemap_tbl * table)
 {
     unsigned long free, shared, nonshared;
     long pagesize;
@@ -318,15 +368,44 @@ void print_stats(pagemap_tbl * table)
     }
 }
 
-void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
+static void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
 {
     int i = 0;
 
-    print_row(NULL, head_l);
+    if (!d_arg)
+        print_row(NULL, head_l);
     while (i < size) {
         print_row(table_arr[i], head_l);
         ++i;
     }
+}
+
+static int sort_f(pagemap_t ** table1, pagemap_t ** table2)
+{
+    return sort_sign*(sort_func(table1,table2));
+}
+
+static void sort_data(pagemap_t ** table_arr, int size, char * key)
+{
+    header_t what, * res;
+    int key_len;
+
+    key_len = strlen(key);
+    if (key[key_len-1] == '-' || key[key_len-1] == '+') {
+        if (key[key_len-1] == '-')
+            sort_sign = -1;
+        else
+            sort_sign = 1;
+        key[key_len] = '\0';
+    }
+    what.name = key;
+    res = bsearch(&what,head_tbl,head_tbl_s,sizeof(header_t),comp_heads);
+    if (!res) {
+        fprintf(stderr,"Unknown sort id: %s\n",key);
+        return;
+    }
+    sort_func = res->sortfun;
+    qsort(table_arr, size, sizeof(pagemap_t*),(void *)sort_f);
 }
 
 int main(int argc, char * argv[])
@@ -334,6 +413,7 @@ int main(int argc, char * argv[])
     header_list * hlist;
     pagemap_tbl * table = NULL;
     pagemap_t ** table_arr;
+    pagemap_t * one_tab;
     int size,i;
 
     int t = parse_args(argc,argv);
@@ -346,16 +426,28 @@ int main(int argc, char * argv[])
         printf("OPEN ERROR");
         return 1;
     }
-    //sort data
+    //get and sort data
     table_arr = get_all_pgmap(table,&size);
+
+    if (s_arg) {
+        sort_data(table_arr,size,sort_id);
+    }
 
     //print data
     hlist = complete_header();
     if (!hlist)
         return 1;
-    if (!d_arg)
+    if (!d_arg && !P_arg)
         print_stats(table);
-    print_data(table_arr, size,hlist);
+    if (!P_arg) {
+        print_data(table_arr, size,hlist);
+    } else {
+        one_tab = get_single_pgmap(table,filter_pid);
+        if (one_tab)
+            if (!d_arg)
+                print_row(NULL,hlist);
+            print_row(one_tab,hlist);
+    }
 
     //close all sources
     close_pgmap_table(table);

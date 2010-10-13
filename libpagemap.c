@@ -463,11 +463,21 @@ static int pgmap_ver(void) {
         return ERROR;
 }
 
+static int is_accessible(char * path)
+{
+    if (access(path,R_OK) != 0) {
+        return ERROR;
+    } else {
+        return OK;
+    }
+}
+
 static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     // it should build the table/tree;
     // encapsulate proc table into some generic form
     //  (struct with function pointers to insert, search, delete)
     DIR * proc_dir = NULL;
+    char path[BUFSIZE];
     struct dirent * proc_ent;
     int curr_pid;
 
@@ -477,8 +487,11 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     table->size = 0;
     while ((proc_ent = readdir(proc_dir))) {
         if (sscanf(proc_ent->d_name,"%d",&curr_pid) == 1) {
-            add_pid(curr_pid,table);
-            table->size += 1;
+            sprintf(path,"/proc/%d/pagemap",curr_pid);
+            if (is_accessible(path) == OK) {
+                add_pid(curr_pid,table);
+                table->size += 1;
+            }
         }
     }
     closedir(proc_dir);
