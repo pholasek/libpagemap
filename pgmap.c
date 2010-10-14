@@ -396,7 +396,9 @@ static void sort_data(pagemap_t ** table_arr, int size, char * key)
             sort_sign = -1;
         else
             sort_sign = 1;
-        key[key_len] = '\0';
+        key[key_len-1] = '\0';
+    } else {
+        sort_sign = 1;
     }
     what.name = key;
     res = bsearch(&what,head_tbl,head_tbl_s,sizeof(header_t),comp_heads);
