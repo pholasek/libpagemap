@@ -1,6 +1,4 @@
-/* PUT GPL license */
-
-// TODO: flags are sentenced to death
+/* PUT LGPL license */
 
 #define _LARGEFILE64_SOURCE
 
@@ -24,13 +22,6 @@ static void trace(const char * string) {
 #ifdef DEBUG
     fprintf(stderr, "%s\n", string);
 #endif
-}
-
-static pagemap_t * alloc_one_tb(void) {
-    pagemap_t * p = NULL;
-
-    p = malloc(sizeof(pagemap_t));
-    return p;
 }
 
 static int open_kpagemap(kpagemap_t * kpagemap) {
@@ -372,7 +363,7 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
    return OK;
 }
 
-static pagemap_tbl * walk_procs(pagemap_tbl * table) {
+static pagemap_tbl * walk_procs(pagemap_tbl * table, int pid) {
     pagemap_list * p;
     int debug;
 
@@ -382,6 +373,8 @@ static pagemap_tbl * walk_procs(pagemap_tbl * table) {
     }
     reset_pos(table);
     while ((p = pid_iter(table))) {
+        if (pid > 0 && p->pid_table.pid != pid) 
+            continue;
         if ((debug = walk_proc_mem(&p->pid_table,&table->kpagemap)) != OK) {
             trace("walk_proc_mem ERROR");
         }
@@ -518,12 +511,12 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
     return table;
 }
 
-pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int flags) {
+pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int pid) {
     fill_mappings(table);
     trace("fill_mappings");
     fill_cmdlines(table);
     trace("fill_cmdlines");
-    if (!walk_procs(table))
+    if (!walk_procs(table,pid))
         return NULL;
     trace("walk_procs");
     return table;

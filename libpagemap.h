@@ -92,7 +92,8 @@ typedef struct pagemap_tbl {
 pagemap_tbl * init_pgmap_table(pagemap_tbl * table);
 
 // fill up pagemap tables for all processes on system
-pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int flags);
+// or exactly one pid, if was choosen
+pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int pid);
 
 // iterate over pagemap_tbl - returns NULL at the end
 pagemap_t * iterate_over_all(pagemap_tbl * table);

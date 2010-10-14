@@ -174,7 +174,7 @@ static int sort_sign; // + or - ?
 // minor functions
 static void print_help(void) {
     printf("%s",HELP_STR);
-    exit(0);
+    exit(1);
 }
 
 static int comp_heads(const void * h1, const void * h2) {
@@ -184,11 +184,12 @@ static int comp_heads(const void * h1, const void * h2) {
 }
 
 // general functions
+
+// parse_args - parsing function
 static int parse_args(int argc, char * argv[])
 {
     int opt;
     extern char * optarg;
-    // parse
     if (argc == 1) {
         d_arg = 0;
         p_arg = 0;
@@ -227,12 +228,13 @@ static int parse_args(int argc, char * argv[])
             }
         }
     }
-    // at the end, consider the globalvars settings
+    // at the end, consider the values of global variables
     if (getuid() != 0)
         n_arg = 1;
     return 0;
 }
 
+// make_header - makes list of header_t structures from input string
 static header_list * make_header(const char * src) {
     char * p = NULL;
     char * src_string = NULL;
@@ -269,6 +271,7 @@ static header_list * make_header(const char * src) {
     return start;
 }
 
+// add_cmd - adds CMD header at the end of current header list
 static header_list * add_cmd(header_list * list) {
     header_list * end, * new;
 
@@ -286,6 +289,7 @@ static header_list * add_cmd(header_list * list) {
     return list;
 }
 
+// complete_header - concatenates all of possible header lists
 static header_list * complete_header(void) {
     header_list * p, * end;
 
@@ -305,6 +309,7 @@ static header_list * complete_header(void) {
     return p;
 }
 
+// destroy_header - destroy list of headers
 static void destroy_header(header_list * list) {
     header_list * curr;
 
@@ -318,7 +323,7 @@ static void destroy_header(header_list * list) {
     }
 }
 
-// with first argument NULL, prints headers
+// print_row - prints data row but with first argument NULL, prints headers
 static void print_row(pagemap_t * table, header_list * head_l)
 {
     header_list * curr;
@@ -356,6 +361,7 @@ static void print_row(pagemap_t * table, header_list * head_l)
     printf("\n");
 }
 
+// print_stats - prints total memory stats that gains from /kpagecount
 static void print_stats(pagemap_tbl * table)
 {
     unsigned long free, shared, nonshared;
@@ -368,6 +374,7 @@ static void print_stats(pagemap_tbl * table)
     }
 }
 
+// print_data - main printing function
 static void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
 {
     int i = 0;
@@ -380,11 +387,13 @@ static void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
     }
 }
 
+// sort_f - envelope for sorting functions
 static int sort_f(pagemap_t ** table1, pagemap_t ** table2)
 {
     return sort_sign*(sort_func(table1,table2));
 }
 
+// sort_data - sort pointers in table_arr in requested order
 static void sort_data(pagemap_t ** table_arr, int size, char * key)
 {
     header_t what, * res;
@@ -421,11 +430,12 @@ int main(int argc, char * argv[])
     int t = parse_args(argc,argv);
 
     if (!(table = init_pgmap_table(table))) {
-        printf("INIT ERROR");
         return 1;
     }
-    if (!open_pgmap_table(table,0x0)) {
-        printf("OPEN ERROR");
+    if (!P_arg) {
+        filter_pid = 0;
+    }
+    if (!open_pgmap_table(table,filter_pid)) {
         return 1;
     }
     //get and sort data
@@ -451,7 +461,7 @@ int main(int argc, char * argv[])
             print_row(one_tab,hlist);
     }
 
-    //close all sources
+    //release sources
     close_pgmap_table(table);
     i=0;
     free(table_arr);
