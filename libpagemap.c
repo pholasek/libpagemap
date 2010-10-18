@@ -428,6 +428,8 @@ static int walk_phys_mem(kpagemap_t * kpagemap, unsigned long * shared, unsigned
 }
 
 static void kill_tables(pagemap_tbl * table) {
+    if (!table)
+        return NULL;
     kill_mappings(table);
     close_kpagemap(&(table->kpagemap));
     destroy_list(table);
@@ -502,11 +504,15 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
     if (!table)
         return NULL;
     trace("allocating of table");
-    if (open_kpagemap(&table->kpagemap) == ERROR)
+    if (open_kpagemap(&table->kpagemap) == ERROR) {
+        free(table);
         return NULL;
+    }
     trace("open_kpagemap");
-    if(!walk_procdir(table))
+    if(!walk_procdir(table)) {
+        free(table);
         return NULL;
+    }
     trace("walk_procdir");
     return table;
 }
@@ -546,6 +552,8 @@ pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size)
     pagemap_t ** arr = NULL;
     pagemap_t * p = NULL;
     int cnt = 0;
+    if (!table || !size)
+        return NULL;
     *size = table->size;
     arr = malloc(table->size*sizeof(pagemap_t*));
     if (!arr)
@@ -562,7 +570,7 @@ pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size)
 // must be used above opened table
 int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned long * free, unsigned long * nonshared)
 {
-    if (!table)
+    if (!table || !shared || !free || !nonshared)
         return ERROR;
     if (table->kpagemap.under_root != 1) {
         return ERROR;

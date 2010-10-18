@@ -8,38 +8,47 @@ int main(void) {
     pagemap_t * tmp = NULL;
     unsigned long free,shared,nonshared;
 
-    if (getuid() != 0) {
-        fprintf(stderr, "Please use root in this case");
-        return 1;
-    }
+    // alloc all pagemap tables and initialize them and alloc kpagemap_t
+    //pagemap_tbl * init_pgmap_table(pagemap_tbl * table);
 
-    if ((table = init_pgmap_table(table)) == NULL) {
-        printf("INIT ERROR");
-        return 1;
-    }
-    if (!open_pgmap_table(table,0x0)) {
-        printf("OPEN ERROR");
-        return 1;
-    }
-    printf("All pids:\n");
-    reset_table_pos(table);
-    while((tmp = iterate_over_all(table))) {
-        printf("pid:%d uss:%lu pss:%lu swap:%lu shr:%lu res:%lu n_drt:%lu n_uptd:%lu n_wbck:%lu n_err:%lu\n",
-                tmp->pid, 
-                tmp->uss*4,
-                tmp->pss*4,
-                tmp->swap*4,
-                tmp->shr*4,
-                tmp->res*4,
-                tmp->n_drt*4,
-                tmp->n_uptd*4,
-                tmp->n_wback*4,
-                tmp->n_err*4
-                );
-    }
-    printf("%d\n", get_physical_pgmap(table,&shared,&free,&nonshared));
-    printf("Memory stats in kB - shared: %lu free: %lu nonshared:%lu\n", shared*4, free*4, nonshared*4);
+    // fill up pagemap tables for all processes on system
+    // or exactly one pid, if was choosen
+    //pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int pid);
+
+    // iterate over pagemap_tbl - returns NULL at the end
+    //pagemap_t * iterate_over_all(pagemap_tbl * table);
+
+    // get exactly one pid from table
+    //pagemap_t * get_pid_from_table(pagemap_tbl * table);
+
+    // return array of all_pids
+    //pagemap_t ** get_all_procs(pagemap_tbl * table);
+
+    // close pagemap tables and free them
+    //void close_pgmap_table(pagemap_tbl * table);
+
+    // return single pagemap table for one pid - AD-HOC
+    //pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid);
+
+    // return array of pointers to proc_tables - useful for sorting
+    //pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size);
+
+    // return single pagemap table for physical memory mapping
+    // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag
+    //int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned long * free, unsigned long * nonshared);
+
+    // it returns all proc_t step by step, return NULL at the end
+    //pagemap_t * iterate_over_all(pagemap_tbl * table);
+
+    //void reset_table_pos(pagemap_tbl * table);
+
     close_pgmap_table(table);
+    open_pgmap_table(table, 0x0);
+    get_single_pgmap(table, 666);
+    get_all_pgmap(table,NULL);
+    get_physical_pgmap(0xdeadbeef,NULL,free,NULL);
+    reset_table_pos(table);
+    iterate_over_all(table);
 
     return 0;
 }

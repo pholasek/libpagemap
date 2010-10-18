@@ -101,9 +101,6 @@ pagemap_t * iterate_over_all(pagemap_tbl * table);
 // get exactly one pid from table
 pagemap_t * get_pid_from_table(pagemap_tbl * table);
 
-// return array of all_pids
-pagemap_t ** get_all_procs(pagemap_tbl * table);
-
 // close pagemap tables and free them
 void close_pgmap_table(pagemap_tbl * table);
 
