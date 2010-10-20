@@ -1,0 +1,35 @@
+libpagemap - library for utilizing of kernel's pagemap interface
+
+1. About pagemap
+2. Using
+3. Provided utility pgmap
+3. Install
+4. Uninstall
+
+1. About pagemap
+
+Pagemap interface was introduced into kernel in 2.6.26 and consists
+of /proc/[pid]/pagemap files, /proc/kpagecount and /proc/kpageflags
+files.
+
+Further info: Documentation/vm/pagemap.txt
+
+2. Using
+
+Using of functions init_pgmap_table and the open_pgmap_table is
+necessary in every cases. Cleaning function close_pgmap_table will
+help to avoid of memory leaks.
+
+3. Provided utility pgmap
+
+Library is shipped with small pgmap utility, which is installed 
+along of library. After install, try pgmap -h for more info.
+
+4. Install
+
+make && make install
+
+5. Uninstall
+
+make uninstall 
+
