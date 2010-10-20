@@ -1,34 +1,56 @@
 #
 # libpagemap Makefile
 #
-MAJOR 		:= 0
-MINOR 		:= 1
+CUR	:= 0
+REV := 0
+AGE := 0
 
-FPIC 		:= -fPIC
-CFLAGS 		:= -std=c99 -Wall -O2 -s
-VSCRIPT 	:= versions.ldscript
-LIBFLAGS 	:= -shared -W1,--version-script,$(VSCRIPT)
-INSTALL     := install -D --owner 0 --group 0
+LIBTOOL     := libtool
+CMODE		:= --mode=compile
+LMODE		:= --mode=link
+IMODE		:= --mode=install
+CLMODE		:= --mode=clean
+UMODE		:= --mode=uninstall
+VERSION     := -version-info $(CUR):$(REV):$(AGE)
+
+CC			:= gcc
+CFLAGS 		:= -std=c99 -Wall -O2
+INSTALL     := install -D --owner=0 --group=0 
 LIB64       := lib$(shell [ -d /lib64 ] && echo 64)
 
-LIB                      := $(DESTDIR)/$(LIB64)/
-usr/lib                  := $(DESTDIR)/usr/$(LIB64)/
-usr/include              := $(DESTDIR)/usr/include/
-usr/bin                  := $(DESTDIR)/usr/bin/
+LIB                     := $(LIB64)
+USRLIB                  := /usr/$(LIB64)
+USRINCLUDE              := /usr/include/
+USRBIN                  := /usr/bin/
 
-all: libpagemap.so pgmap
+all: pgmap
 
-libpagemap.o: libpagemap.c libpagemap.h
-	$(CC) $(FPIC) $(CFLAGS) -c libpagemap.c
+libpagemap.lo: libpagemap.c libpagemap.h
+	$(LIBTOOL) $(CMODE) $(CC) $(CFLAGS) -c libpagemap.c
 
-libpagemap.so: libpagemap.o
-	$(CC) $(LIBFLAGS),-soname,libpagemap.so.$(MAJOR) -o libpagemap.so.$(MAJOR).$(MINOR) libpagemap.o
+libpagemap.la: libpagemap.lo
+	$(LIBTOOL) $(LMODE) $(CC) $(CFLAGS) $(VERSION) -o libpagemap.la libpagemap.lo \
+    	 -rpath $(USRLIB)
 
-pgmap: libpagemap.so
-	$(CC) $(CFLAGS) -L. -lpagemap pgmap.c -o pgmap
+pgmap.o: pgmap.c
+	$(CC) $(CFLAGS) -c pgmap.c 
+
+pgmap: pgmap.o libpagemap.la
+	$(LIBTOOL) $(LMODE) $(CC) $(CFLAGS) -o pgmap pgmap.o libpagemap.la
 
 clean:
-	rm -f libpagemap.so libpagemap.so.$(MAJOR).$(MINOR) libpagemap.o pgmap
+	$(LIBTOOL) $(CLMODE) rm -f pgmap libpagemap.la *.o *.la *.lo
 
-install:
+install: libpagemap.la pgmap
+	$(LIBTOOL) $(IMODE) $(INSTALL) libpagemap.la $(USRLIB)
+	$(LIBTOOL) --finish $(USRLIB)
+	$(LIBTOOL) $(IMODE) $(INSTALL) pgmap $(USRBIN)
+	# header??
+
+uninstall: clean
+	$(LIBTOOL) $(UMODE) rm -f $(USRLIB)/libpagemap.la
+	rm -f $(USRBIN)pgmap
+
+
+
 	
