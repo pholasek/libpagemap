@@ -16,9 +16,8 @@ VERSION     := -version-info $(CUR):$(REV):$(AGE)
 CC			:= gcc
 CFLAGS 		:= -std=c99 -Wall -O2
 INSTALL     := install -D --owner=0 --group=0 
-LIB64       := lib$(shell [ -d /lib64 ] && echo 64)
+LIB64       := lib$(shell [ -d /usr/lib64 ] && echo 64)
 
-LIB                     := $(LIB64)
 USRLIB                  := /usr/$(LIB64)
 USRINCLUDE              := /usr/include/
 USRBIN                  := /usr/bin/
@@ -45,7 +44,6 @@ install: libpagemap.la pgmap
 	$(LIBTOOL) $(IMODE) $(INSTALL) libpagemap.la $(USRLIB)
 	$(LIBTOOL) --finish $(USRLIB)
 	$(LIBTOOL) $(IMODE) $(INSTALL) pgmap $(USRBIN)
-	# header??
 
 uninstall: clean
 	$(LIBTOOL) $(UMODE) rm -f $(USRLIB)/libpagemap.la
