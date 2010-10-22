@@ -36,7 +36,7 @@
 #define STAT_ROW      "*** total: %lu kB, free: %lu kB, shared: %lu kB, nonshared: %lu kB ***\n"
 #define HELP_STR      "pgmap - utility for getting information from kernel's pagemap interface\n" \
                       "Usage: pgmap [-ndpFPs]\n " \
-                      "\t -h :for this info"\
+                      "\t -h :for this info\n"\
                       "\t -n :simulate non-root = only RES and SWAP\n"\
                       "\t -d :without headers\n"\
                       "\t -p :prints numbers in pages (instead of default kB)\n"\
