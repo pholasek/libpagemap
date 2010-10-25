@@ -31,9 +31,69 @@
 
 #include "libpagemap.h"
 
+#define PERM_WRITE      0x0100
+#define PERM_READ       0x0200
+#define PERM_EXEC       0x0400
+#define PERM_SHARE      0x0800
+#define PERM_PRIV       0x1000
+
+#define PAGEMAP_COUNTS  0x0001  // non-kpageflags stuff
+#define PAGEMAP_IO      0x0002  // IO stats
+#define PAGEMAP_VARIOUS 0x0004  // various stats
+#define PAGEMAP_LRU     0x0008  // LRU-related stats
+#define PAGEMAP_ROOT    0x0010  // without this internal flag we can count only res and swap
+                                // it is set if getuid() == 0
+#define BUFSIZE         512
+#define OK              0
+#define ERROR           1
+#define RD_ERROR        2
+
+// BIT_SET(num,index)
+#define BIT_SET(x,n) ((1LL << n) & x)
+
+/*
+ * Couple of macros from
+ * fs/proc/task_mmu.c
+ */
+#define PM_ENTRY_BYTES      sizeof(uint64_t)
+#define PM_STATUS_BITS      3
+#define PM_STATUS_OFFSET    (64 - PM_STATUS_BITS)
+#define PM_STATUS_MASK      (((1LL << PM_STATUS_BITS) - 1) << PM_STATUS_OFFSET)
+#define PM_STATUS(nr)       (((nr) << PM_STATUS_OFFSET) & PM_STATUS_MASK)
+#define PM_PSHIFT_BITS      6
+#define PM_PSHIFT_OFFSET    (PM_STATUS_OFFSET - PM_PSHIFT_BITS)
+#define PM_PSHIFT_MASK      (((1LL << PM_PSHIFT_BITS) - 1) << PM_PSHIFT_OFFSET)
+#define PM_PSHIFT(x)        (((u64) (x) << PM_PSHIFT_OFFSET) & PM_PSHIFT_MASK)
+#define PM_PFRAME_MASK      ((1LL << PM_PSHIFT_OFFSET) - 1)
+#define PM_PFRAME(x)        ((x) & PM_PFRAME_MASK)
+
+#define PM_PRESENT          PM_STATUS(4LL)
+#define PM_SWAP             PM_STATUS(2LL)
+
 #define DEBUG 1
 #undef DEBUG
 
+/////// NON-USER STRUCTURES //////////////
+typedef struct proc_mapping {
+    unsigned long start, end, offset;
+    unsigned long * pfns;
+    int perms;
+    struct proc_mapping * next;
+} proc_mapping;
+
+typedef struct pagemap_list {
+    pagemap_t pid_table;
+    struct pagemap_list * next;
+} pagemap_list;
+
+typedef struct kpagemap_t {
+    int kpgm_count_fd;
+    int kpgm_flags_fd;
+    int under_root;
+    long pagesize;
+} kpagemap_t;
+
+///////// FUNCTIONS ///////////////////////////////
 static void trace(const char * string) {
 #ifdef DEBUG
     fprintf(stderr, "%s\n", string);
@@ -64,9 +124,8 @@ static void close_kpagemap(kpagemap_t * kpagemap) {
     close(kpagemap->kpgm_flags_fd);
 }
 
-// will be deprecated with tree////////////////////////////////////
+/////////// list handlers ////////////////////////////
 static pagemap_list * pid_iter(pagemap_tbl * table) {
-    // for tree it could be some in-order walk
     pagemap_list * tmp;
 
     if (!table)
@@ -147,21 +206,19 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
 }
 ////////////////////////////////////////////////////////////////
 static int read_cmd(pagemap_t * p_t) {
-    int cmdline_fd = -1;
+    FILE * cmdline_fd = NULL;
     char path[BUFSIZE];
-    int size;
+    char name[SMALLBUF];
 
-    snprintf(path,SMALLBUF,"/proc/%d/cmdline",p_t->pid);
-    cmdline_fd = open(path,O_RDONLY);
-    if (cmdline_fd < 0)
+    snprintf(path,SMALLBUF,"/proc/%d/status",p_t->pid);
+    cmdline_fd = fopen(path,"r");
+    if (!cmdline_fd)
         return RD_ERROR;
-    if ((size = read(cmdline_fd, p_t->cmdline, SMALLBUF-1)) >= 0) {
-        path[size] = '\0';
-    } else {
-        close(cmdline_fd);
+    if (!(fgets(name, SMALLBUF-1, cmdline_fd))) {
         return RD_ERROR;
     }
-    close(cmdline_fd);
+    snprintf(p_t->cmdline,SMALLBUF,"%s",&name[6]);
+    fclose(cmdline_fd);
     return OK;
 }
 
@@ -391,7 +448,7 @@ static pagemap_tbl * walk_procs(pagemap_tbl * table, int pid) {
     while ((p = pid_iter(table))) {
         if (pid > 0 && p->pid_table.pid != pid) 
             continue;
-        if ((debug = walk_proc_mem(&p->pid_table,&table->kpagemap)) != OK) {
+        if ((debug = walk_proc_mem(&p->pid_table,table->kpagemap)) != OK) {
             trace("walk_proc_mem ERROR");
         }
     }
@@ -445,10 +502,11 @@ static int walk_phys_mem(kpagemap_t * kpagemap, unsigned long * shared, unsigned
 
 static void kill_tables(pagemap_tbl * table) {
     if (!table)
-        return NULL;
+        return ;
     kill_mappings(table);
-    close_kpagemap(&(table->kpagemap));
+    close_kpagemap(table->kpagemap);
     destroy_list(table);
+    free(table->kpagemap);
     free(table);
 }
 
@@ -484,9 +542,6 @@ static int is_accessible(char * path)
 }
 
 static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
-    // it should build the table/tree;
-    // encapsulate proc table into some generic form
-    //  (struct with function pointers to insert, search, delete)
     DIR * proc_dir = NULL;
     char path[BUFSIZE];
     struct dirent * proc_ent;
@@ -520,7 +575,8 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
     if (!table)
         return NULL;
     trace("allocating of table");
-    if (open_kpagemap(&table->kpagemap) == ERROR) {
+    table->kpagemap = malloc(sizeof(kpagemap_t));
+    if (open_kpagemap(table->kpagemap) == ERROR) {
         free(table);
         return NULL;
     }
@@ -588,13 +644,13 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
 {
     if (!table || !shared || !free || !nonshared)
         return ERROR;
-    if (table->kpagemap.under_root != 1) {
+    if (table->kpagemap->under_root != 1) {
         return ERROR;
     } else {
         *shared = 0;
         *free = 0;
         *nonshared = 0;
-        return walk_phys_mem(&table->kpagemap, shared, free, nonshared);
+        return walk_phys_mem(table->kpagemap, shared, free, nonshared);
     }
 }
 

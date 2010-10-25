@@ -16,34 +16,18 @@
 //
 // Author: Petr Holasek , pholasek@redhat.com
 
-#define PERM_WRITE      0x0100
-#define PERM_READ       0x0200
-#define PERM_EXEC       0x0400
-#define PERM_SHARE      0x0800
-#define PERM_PRIV       0x1000
+#ifndef LIBPAGEMAP_H
+#define LIBPAGEMAP_H
 
-#define PAGEMAP_COUNTS  0x0001  // non-kpageflags stuff
-#define PAGEMAP_IO      0x0002  // IO stats  
-#define PAGEMAP_VARIOUS 0x0004  // various stats
-#define PAGEMAP_LRU     0x0008  // LRU-related stats
-#define PAGEMAP_ROOT    0x0010  // without this internal flag we can count only res and swap
-                                // it is set if getuid() == 0
-#define BUFSIZE         512
 #define SMALLBUF        128
-#define OK              0
-#define ERROR           1
-#define RD_ERROR        2
 
-typedef struct proc_mapping {
-    unsigned long start, end, offset;
-    unsigned long * pfns;
-    int perms;
-    struct proc_mapping * next;
-} proc_mapping;
+struct proc_mapping;
+struct pagemap_list;
+struct kpagemap_t;
 
 typedef struct pagemap_t {
     int pid;
-    proc_mapping * mappings;
+    struct proc_mapping * mappings;
     char cmdline[SMALLBUF];
    // non-kpageflags counts
     unsigned long uss;      // number of pages of uss memory
@@ -80,28 +64,15 @@ typedef struct pagemap_t {
     unsigned long n_recycle;   // number of pages which are assigned to recycling
 } pagemap_t;
 
-/////////// TO BE OPTIMIZED TO SOMETHING FASTER /////////////
-typedef struct pagemap_list {
-    pagemap_t pid_table;
-    struct pagemap_list * next;
-} pagemap_list;
-/////////////////////////////////////////////////////////////
-
-typedef struct kpagemap_t {
-    int kpgm_count_fd;
-    int kpgm_flags_fd;
-    int under_root;
-    long pagesize;
-} kpagemap_t;
-
 typedef struct pagemap_tbl {
-    pagemap_list * start; //it will be root of tree
-    pagemap_list * curr;
+    struct pagemap_list * start; //it will be root of tree
+    struct pagemap_list * curr;
     unsigned long size;  //number of pagemap processes
     int flags;
-    kpagemap_t kpagemap;
+    struct kpagemap_t * kpagemap;
 } pagemap_tbl;
 
+/////////// PUBLIC //////////////////////////////////////////
 
 
 // alloc all pagemap tables and initialize them and alloc kpagemap_t
@@ -134,25 +105,4 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
 pagemap_t * iterate_over_all(pagemap_tbl * table);
 
 void reset_table_pos(pagemap_tbl * table);
-
-// BIT_SET(num,index)
-#define BIT_SET(x,n) ((1LL << n) & x)
-
-/*
- * Couple of macros from
- * fs/proc/task_mmu.c
- */
-#define PM_ENTRY_BYTES      sizeof(uint64_t)
-#define PM_STATUS_BITS      3
-#define PM_STATUS_OFFSET    (64 - PM_STATUS_BITS)
-#define PM_STATUS_MASK      (((1LL << PM_STATUS_BITS) - 1) << PM_STATUS_OFFSET)
-#define PM_STATUS(nr)       (((nr) << PM_STATUS_OFFSET) & PM_STATUS_MASK)
-#define PM_PSHIFT_BITS      6
-#define PM_PSHIFT_OFFSET    (PM_STATUS_OFFSET - PM_PSHIFT_BITS)
-#define PM_PSHIFT_MASK      (((1LL << PM_PSHIFT_BITS) - 1) << PM_PSHIFT_OFFSET)
-#define PM_PSHIFT(x)        (((u64) (x) << PM_PSHIFT_OFFSET) & PM_PSHIFT_MASK)
-#define PM_PFRAME_MASK      ((1LL << PM_PSHIFT_OFFSET) - 1)
-#define PM_PFRAME(x)        ((x) & PM_PFRAME_MASK)
-
-#define PM_PRESENT          PM_STATUS(4LL)
-#define PM_SWAP             PM_STATUS(2LL)
+#endif

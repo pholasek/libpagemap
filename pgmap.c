@@ -23,7 +23,6 @@
 #include <sys/types.h>
 #include <string.h>
 
-
 #include "libpagemap.h"
 
 #define NON_ROOT_HEAD "pid,res,swap"
@@ -33,7 +32,7 @@
                       "n_anon,n_swpche,n_swpbck,n_onlru,n_actlru,n_unevctb," \
                       "n_referenced,n_recycle"
 
-#define STAT_ROW      "*** total: %lu kB, free: %lu kB, shared: %lu kB, nonshared: %lu kB ***\n"
+#define STAT_ROW      "Total:     %lu kB\nFree:      %lu kB\nShared:    %lu kB\nNonshared: %lu kB\n--\n"
 #define HELP_STR      "pgmap - utility for getting information from kernel's pagemap interface\n" \
                       "Usage: pgmap [-ndpFPs]\n " \
                       "\t -h :for this info\n"\
@@ -255,7 +254,7 @@ static int parse_args(int argc, char * argv[])
 static header_list * make_header(const char * src) {
     char * p = NULL;
     char * src_string = NULL;
-    header_list * start, * temp, * point;
+    header_list * start = NULL, * temp, * point;
     header_t * res;
     header_t key;
 
@@ -263,12 +262,16 @@ static header_list * make_header(const char * src) {
     p = strtok(src_string,",");
     if (p)
         start = malloc(sizeof(header_list));
+        if (!start)
+            return NULL;
         start->next = NULL;
     while(p) {
         key.name = p;
         res = bsearch(&key,head_tbl,head_tbl_s,sizeof(header_t),comp_heads);
         if (res) {
            temp = (header_list *) malloc(sizeof(header_list));
+           if (!temp)
+               return NULL;
            memcpy(&temp->item,res,sizeof(header_t));
            temp->next = NULL;
            point = start;
@@ -360,6 +363,7 @@ static void print_row(pagemap_t * table, header_list * head_l)
             printf("%s", curr->item.desc);
             curr = curr->next;
         }
+        printf("\n");
     } else {
         while(curr) {
             if (curr->item.width != -1) {
@@ -375,7 +379,6 @@ static void print_row(pagemap_t * table, header_list * head_l)
             curr = curr->next;
         }
     }
-    printf("\n");
 }
 
 // print_stats - prints total memory stats that gains from /kpagecount
@@ -385,7 +388,7 @@ static void print_stats(pagemap_tbl * table)
     long pagesize;
 
     pagesize = getpagesize() >> 10; // kB need
-    if (get_physical_pgmap(table, &shared, &free, &nonshared) == OK) {
+    if (get_physical_pgmap(table, &shared, &free, &nonshared) == 0) {
         printf(STAT_ROW, free*pagesize+shared*pagesize+nonshared*pagesize,
                 free*pagesize, shared*pagesize, nonshared*pagesize);
     }
@@ -444,7 +447,7 @@ int main(int argc, char * argv[])
     pagemap_t * one_tab;
     int size,i;
 
-    int t = parse_args(argc,argv);
+    parse_args(argc,argv);
 
     if (!(table = init_pgmap_table(table))) {
         return 1;
