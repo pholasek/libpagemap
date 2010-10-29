@@ -91,6 +91,7 @@ typedef struct kpagemap_t {
     int kpgm_flags_fd;
     int under_root;
     long pagesize;
+    uint64_t phys_p_count;
 } kpagemap_t;
 
 ///////// FUNCTIONS ///////////////////////////////
@@ -101,6 +102,10 @@ static void trace(const char * string) {
 }
 
 static int open_kpagemap(kpagemap_t * kpagemap) {
+    FILE * f = NULL;
+    char buffer[BUFSIZE];
+    uint64_t ramsize;
+
     if (getuid() == 0) {
         kpagemap->kpgm_count_fd = open("/proc/kpagecount",O_RDONLY);
         if (kpagemap->kpgm_count_fd < 0) {
@@ -116,7 +121,34 @@ static int open_kpagemap(kpagemap_t * kpagemap) {
         kpagemap->under_root = 0;
     }
     kpagemap->pagesize = sysconf(_SC_PAGESIZE);
-    return OK;
+    if (!kpagemap->pagesize)
+        return ERROR;
+
+    // how to determine amount of physmemory ?
+    // 1. parse from /proc/meminfo
+    // 2. another posibility = size of /proc/kcore
+    f = fopen("/proc/meminfo","r");
+    if (!f)
+        return RD_ERROR;
+    while(fgets(buffer,BUFSIZE,f)) {
+        if (strstr(buffer,"MemTotal")) {
+            if (sscanf(buffer,"MemTotal: %lu kB",&ramsize) < 1) {
+                fclose(f);
+                return RD_ERROR;
+            } else {
+                break;
+            }
+        }
+    }
+    fclose(f);
+    if (ramsize == 0)
+        return ERROR;
+    if (kpagemap->pagesize >> 10 != 0) {
+        kpagemap->phys_p_count = ramsize/(kpagemap->pagesize >> 10);
+        return OK;
+    } else {
+        return ERROR;
+    }
 }
 
 static void close_kpagemap(kpagemap_t * kpagemap) {
@@ -360,7 +392,35 @@ static pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
     return p_t;
 }
 
-static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
+int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
+{
+    char data[8];
+    // kpageflags
+    if (lseek64(table->kpagemap->kpgm_flags_fd, page*8, SEEK_SET) == (off64_t) -1) {
+        return RD_ERROR;
+    }
+    if (read(table->kpagemap->kpgm_flags_fd, data, 8) != 8) {
+        return RD_ERROR;
+    }
+    memcpy(target, data, 8);
+    return OK;
+}
+
+int get_kpagecount(pagemap_tbl * table, uint64_t page, uint64_t * target)
+{
+    char data[8];
+    // kpagecount's
+    if (lseek64(table->kpagemap->kpgm_count_fd, page*8, SEEK_SET) == (off64_t) -1) {
+        return RD_ERROR;
+    }
+    if (read(table->kpagemap->kpgm_count_fd, data, 8) != 8) {
+        return RD_ERROR;
+    }
+    memcpy(target, data, 8);
+    return OK;
+}
+
+static int walk_proc_mem(pagemap_t * p_t, pagemap_tbl * table) {
     int pagemap_fd;
     char data[8];
     char pagemap_p[BUFSIZE];
@@ -376,8 +436,8 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
     }
 
     for (proc_mapping * cur = p_t->mappings; cur != NULL; cur = cur->next) {
-        for (uint64_t addr = cur->start; addr < cur->end; addr += kpgmap_t->pagesize) {
-            if ((lseek_ret = lseek64(pagemap_fd, (addr/kpgmap_t->pagesize)*8, SEEK_SET)) == (off64_t) -1) {
+        for (uint64_t addr = cur->start; addr < cur->end; addr += table->kpagemap->pagesize) {
+            if ((lseek_ret = lseek64(pagemap_fd, (addr/table->kpagemap->pagesize)*8, SEEK_SET)) == (off64_t) -1) {
                 close(pagemap_fd);
                 trace("pagemap seek error");
                 return RD_ERROR;
@@ -398,17 +458,10 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
             }
             pfn = PM_PFRAME(datanum);
             p_t->res += 1;
-            if (kpgmap_t->under_root == 1) {
-                // kpagecount's
-                if (lseek64(kpgmap_t->kpgm_count_fd, pfn*8, SEEK_SET) == -1) {
-                    close(pagemap_fd);
+
+            if (table->kpagemap->under_root == 1) {
+                if (get_kpagecount(table, pfn ,&datanum) != OK)
                     return RD_ERROR;
-                }
-                if (read(kpgmap_t->kpgm_count_fd, data, 8) != 8) {
-                    close(pagemap_fd);
-                    return RD_ERROR;
-                }
-                memcpy(&datanum, data, 8);
                 if (datanum == 0x1) {
                     p_t->uss += 1;
                 }
@@ -417,19 +470,12 @@ static int walk_proc_mem(pagemap_t * p_t, kpagemap_t * kpgmap_t) {
                 if (datanum) //for sure
                     pss += 1/(double)datanum;
                 // kpageflags's
-                if (lseek64(kpgmap_t->kpgm_flags_fd, pfn*8, SEEK_SET) == -1) {
-                    close(pagemap_fd);
+                if (get_kpageflags(table, pfn ,&datanum) != OK)
                     return RD_ERROR;
-                }
-                if (read(kpgmap_t->kpgm_flags_fd, data, 8) != 8) {
-                    close(pagemap_fd);
-                    return RD_ERROR;
-                }
-                memcpy(&datanum, data, 8);
                 // flags stuff
                 set_flags(p_t, datanum);
             }
-       }
+        }
    }
    p_t->pss = (uint64_t)pss;
    close(pagemap_fd);
@@ -446,55 +492,28 @@ static pagemap_tbl * walk_procs(pagemap_tbl * table, int pid) {
     }
     reset_pos(table);
     while ((p = pid_iter(table))) {
-        if (pid > 0 && p->pid_table.pid != pid) 
+        if (pid > 0 && p->pid_table.pid != pid)
             continue;
-        if ((debug = walk_proc_mem(&p->pid_table,table->kpagemap)) != OK) {
+        if ((debug = walk_proc_mem(&p->pid_table,table)) != OK) {
             trace("walk_proc_mem ERROR");
         }
     }
     return table;
 }
 
-static int walk_phys_mem(kpagemap_t * kpagemap, unsigned long * shared, unsigned long * free, unsigned long * nonshared)
+static int walk_phys_mem(pagemap_tbl * table, unsigned long * shared, unsigned long * free, unsigned long * nonshared)
 {
-    uint64_t datanum_cnt;
-    char data[8];
-    FILE * f;
-    char buffer[BUFSIZE];
-    unsigned long total_mem = 0;
+    uint64_t datanum;
 
-    // how to determine amount of physmemory ?
-    // parse from /proc/meminfo
-    f = fopen("/proc/meminfo","r");
-    if (!f)
-        return RD_ERROR;
-    while(fgets(buffer,BUFSIZE,f)) {
-        if (strstr(buffer,"MemTotal")) {
-            if (sscanf(buffer,"MemTotal: %lu kB",&total_mem) < 1) {
-                fclose(f);
-                return RD_ERROR;
-            } else {
-                break;
-            }
-        }
-    }
-    fclose(f);
-    if (total_mem == 0)
-        return ERROR;
-
-    for (off64_t seek = 0; seek < total_mem*1024/kpagemap->pagesize*8; seek += 8) {
-        if (lseek64(kpagemap->kpgm_count_fd, seek, SEEK_SET) == -1)
+    for (uint64_t seek = 0; seek <= table->kpagemap->phys_p_count; seek++) {
+        if (get_kpagecount(table, seek , &datanum) != OK)
             return RD_ERROR;
-        if (read(kpagemap->kpgm_count_fd, data, 8) != 8)
-            return RD_ERROR;
-        memcpy(&datanum_cnt, data, 8);
-
         // kpagecount's
-        if (datanum_cnt == 0x1)
+        if (datanum == 0x1)
             *nonshared += 1;
-        if (datanum_cnt > 0x1)
+        if (datanum > 0x1)
             *shared += 1;
-        if (datanum_cnt == 0x0)
+        if (datanum == 0x0)
             *free += 1;
     }
     return OK;
@@ -576,7 +595,7 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
         return NULL;
     trace("allocating of table");
     table->kpagemap = malloc(sizeof(kpagemap_t));
-    if (open_kpagemap(table->kpagemap) == ERROR) {
+    if (open_kpagemap(table->kpagemap) != OK) {
         free(table);
         return NULL;
     }
@@ -650,7 +669,7 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
         *shared = 0;
         *free = 0;
         *nonshared = 0;
-        return walk_phys_mem(table->kpagemap, shared, free, nonshared);
+        return walk_phys_mem(table, shared, free, nonshared);
     }
 }
 

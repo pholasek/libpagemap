@@ -21,6 +21,8 @@
 
 #define SMALLBUF        128
 
+#include <stdint.h>
+
 struct proc_mapping;
 struct pagemap_list;
 struct kpagemap_t;
@@ -105,4 +107,11 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
 pagemap_t * iterate_over_all(pagemap_tbl * table);
 
 void reset_table_pos(pagemap_tbl * table);
+
+// it returns number of pages of physical ram
+uint64_t get_ram_size(pagemap_tbl * table);
+
+// it returns 8-tuple of bytes (uint64_t) from kpagecount/kpageflags
+int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target);
+int get_kpagecount(pagemap_tbl * table, uint64_t page, uint64_t * target);
 #endif

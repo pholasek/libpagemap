@@ -21,6 +21,15 @@ LIB64       := lib$(shell [ -d /usr/lib64 ] && echo 64)
 USRLIB                  := /usr/$(LIB64)
 USRINCLUDE              := /usr/include/
 USRBIN                  := /usr/bin/
+KMAJOR :=$(shell uname -r | cut -f1 -d.)
+KMINOR :=$(shell uname -r | cut -f2 -d.)
+KMICRO :=$(shell uname -r | cut -f3 -d.)
+KVERSION := $(shell [ $(KMAJOR) -eq 2 ] && [ $(KMINOR) -ge 6 ] && [ $(KMICRO) -ge 25 ] && echo true)
+
+ifneq ($(KVERSION),true) 
+	@echo "Your kernel is too old."
+	exit 2
+endif
 
 all: pgmap
 
@@ -48,7 +57,5 @@ install: libpagemap.la pgmap
 uninstall: clean
 	$(LIBTOOL) $(UMODE) rm -f $(USRLIB)/libpagemap.la
 	rm -f $(USRBIN)pgmap
-
-
 
 	
