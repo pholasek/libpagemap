@@ -1,0 +1,135 @@
+#!/usr/bin/python
+
+import pygtk
+pygtk.require('2.0')
+import gtk
+import os
+import sys
+from ctypes import *
+
+class KPAGEMAP_T(Structure):
+    pass
+
+class PROC_MAPPING(Structure):
+    pass
+
+class PAGEMAP_LIST(Structure):
+    pass
+
+class PAGEMAP_T(Structure):
+    _fields_ = [("pid", c_int),
+        ("mappings", POINTER(PROC_MAPPING)),
+        ("cmdline", c_char_p),
+        ("uss", c_ulong),
+        ("pss", c_ulong),
+        ("swap", c_ulong),
+        ("res", c_ulong),
+        ("shr", c_ulong),
+        ("n_drt", c_ulong),
+        ("n_uptd", c_ulong),
+        ("n_wback", c_ulong),
+        ("n_err", c_ulong),
+        ("n_lck", c_ulong),
+        ("n_slab", c_ulong),
+        ("n_buddy", c_ulong),
+        ("n_cmpndh", c_ulong),
+        ("n_cmpndt", c_ulong),
+        ("n_ksm", c_ulong),
+        ("n_hwpois", c_ulong),
+        ("n_huge", c_ulong),
+        ("n_npage", c_ulong),
+        ("n_mmap", c_ulong),
+        ("n_anon", c_ulong),
+        ("n_swpche", c_ulong),
+        ("n_swpbck", c_ulong),
+        ("n_onlru", c_ulong),
+        ("n_actlru", c_ulong),
+        ("n_unevctb", c_ulong),
+        ("n_referenced", c_ulong),
+        ("n_2recycle", c_ulong)
+    ]
+
+class PAGEMAP_TBL(Structure):
+    _fields_ = [("start", POINTER(PAGEMAP_LIST)),
+        ("curr", POINTER(PAGEMAP_LIST)),
+        ("size", c_ulong),
+        ("flags", c_int),
+        ("kpagemap", POINTER(KPAGEMAP_T))
+    ]
+
+class PagemapData:
+    '''
+    Class which encapsulate libpagemap operations
+    '''
+    def __init__(self):
+        libpagemap = cdll.LoadLibrary("libpagemap.so")
+        self.init_pgmap_table = libpagemap.init_pgmap_table
+        self.init_pgmap_table.restype = POINTER(PAGEMAP_TBL)
+        self.open_pgmap_table = libpagemap.open_pgmap_table
+        self.open_pgmap_table.restype = POINTER(PAGEMAP_TBL)
+        self.reset_table_pos = libpagemap.reset_table_pos
+        self.iterate_over_all = libpagemap.iterate_over_all
+        self.iterate_over_all.restype = POINTER(PAGEMAP_T) 
+        self.get_ram_size = libpagemap.get_ram_size
+        self.get_ram_size.restype = c_ulonglong
+        self.get_kpgcnt = libpagemap.get_kpgcnt
+        self.get_kpgcnt.restype = c_ulonglong
+        self.get_kpgflg = libpagemap.get_kpgflg
+        self.get_kpgflg.restype = c_ulonglong
+
+        self.table = pointer(PAGEMAP_TBL())
+        self.pagecount = 0
+
+    def refresh_procs(self):
+        self.table = self.init_pgmap_table(self.table)
+
+    def refresh_pagecount(self):
+        self.pagecount = self.get_ram_size(self.table)
+        return self.pagecount
+
+    def get_count(self,page):
+        return self.get_kpgcnt(self.table, page)
+
+    def get_flags(self,page):
+        return self.get_kpgflg(self.table, page)
+
+    def refresh_data(self):
+        #self.open_pgmap_table(self.table) 
+        pass
+
+    def clean_data(self):
+        pass #close 
+
+class Painter:
+    '''
+    Class which invoke gtk paintings of pgmap_data class to Window
+    '''
+    def __init__(self):
+        self.pagemap = PagemapData()
+
+    def test(self):
+        self.pagemap.refresh_procs()
+        print self.pagemap.refresh_pagecount()
+        print bin(self.pagemap.get_count(80000))
+        print bin(self.pagemap.get_flags(80000))
+
+    def __page2pixel(self,page):
+        pass
+
+    def init_drawing(self):
+        pass
+
+class Window: # There will be PagemapData instance
+    '''
+    Graphical part of application
+    '''
+    def __init__(self):
+        pass
+
+if __name__ == "__main__":
+    p = Painter()
+    p.test()
+
+    
+    
+

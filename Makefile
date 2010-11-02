@@ -14,7 +14,7 @@ UMODE		:= --mode=uninstall
 VERSION     := -version-info $(CUR):$(REV):$(AGE)
 
 CC			:= gcc
-CFLAGS 		:= -std=c99 -Wall -O2
+CFLAGS 		:= -std=c99 -Wall -g
 INSTALL     := install -D --owner=0 --group=0 
 LIB64       := lib$(shell [ -d /usr/lib64 ] && echo 64)
 

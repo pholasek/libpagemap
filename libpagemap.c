@@ -71,7 +71,7 @@
 #define PM_SWAP             PM_STATUS(2LL)
 
 #define DEBUG 1
-#undef DEBUG
+//#undef DEBUG
 
 /////// NON-USER STRUCTURES //////////////
 typedef struct proc_mapping {
@@ -172,12 +172,12 @@ static pagemap_list * pid_iter(pagemap_tbl * table) {
     return NULL;
 }
 
-static pagemap_list * reset_pos(pagemap_tbl * table) {
+static pagemap_t * reset_pos(pagemap_tbl * table) {
     if (!table || !(table->start))
         return NULL;
     else
         table->curr = table->start;
-    return table->curr;
+    return &(table->curr->pid_table);
 }
 
 static void destroy_list(pagemap_tbl * table) {
@@ -229,6 +229,7 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
                 return NULL;
             curr = curr->next;
             curr->pid_table.pid = n_pid;
+            curr->pid_table.mappings = NULL;
             curr->next = NULL;
             return curr;
         } else
@@ -276,7 +277,7 @@ static int read_maps(pagemap_t * p_t) {
     maps_fd = fopen(path,"r");
     if (!maps_fd) {
         trace("error maps open ");
-        return OK;
+        return RD_ERROR;
     }
     while (fgets(line,BUFSIZE,maps_fd)) {
         new = malloc(sizeof(proc_mapping));
@@ -392,7 +393,7 @@ static pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
     return p_t;
 }
 
-int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
+static int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
 {
     char data[8];
     // kpageflags
@@ -406,7 +407,7 @@ int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
     return OK;
 }
 
-int get_kpagecount(pagemap_tbl * table, uint64_t page, uint64_t * target)
+static int get_kpagecount(pagemap_tbl * table, uint64_t page, uint64_t * target)
 {
     char data[8];
     // kpagecount's
@@ -431,6 +432,7 @@ static int walk_proc_mem(pagemap_t * p_t, pagemap_tbl * table) {
     sprintf(pagemap_p,"/proc/%d/pagemap",p_t->pid);
     pagemap_fd = open(pagemap_p,O_RDONLY);
     if (pagemap_fd < 0) {
+        printf("Err in pid:%u\n", p_t->pid);
         trace("error pagemap open");
         return ERROR;
     }
@@ -583,6 +585,11 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     return table;
 }
 
+static uint64_t ram_count(pagemap_tbl * table)
+{
+    return table->kpagemap->phys_p_count;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // external interface ////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -682,9 +689,36 @@ pagemap_t * iterate_over_all(pagemap_tbl * table)
     return &tmp->pid_table;
 }
 
-void reset_table_pos(pagemap_tbl * table)
+// Reset position of pid table seeker
+pagemap_t * reset_table_pos(pagemap_tbl * table)
 {
-    reset_pos(table);
+    return reset_pos(table);
 }
 
-//
+// Return amount of physical memory pages
+uint64_t get_ram_size(pagemap_tbl * table)
+{
+    return ram_count(table);
+}
+
+// Return 8-byte value from kpageflags file
+uint64_t get_kpgflg(pagemap_tbl * table, uint64_t page)
+{
+    uint64_t value;
+    if (get_kpageflags(table,page,&value) == OK) {
+        return value;
+    } else {
+        return 0;
+    }
+}
+
+// Return 8-byte value from kpagecount file
+uint64_t get_kpgcnt(pagemap_tbl * table, uint64_t page)
+{
+    uint64_t value;
+    if (get_kpagecount(table,page,&value) == OK) {
+        return value;
+    } else {
+        return 0;
+    }
+}
