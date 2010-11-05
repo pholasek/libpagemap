@@ -71,7 +71,7 @@
 #define PM_SWAP             PM_STATUS(2LL)
 
 #define DEBUG 1
-//#undef DEBUG
+#undef DEBUG
 
 /////// NON-USER STRUCTURES //////////////
 typedef struct proc_mapping {

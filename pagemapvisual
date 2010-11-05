@@ -1,10 +1,30 @@
 #!/usr/bin/python
 
+# pagemapvisual - tool for graphical representation of pagemap interface
+# Copyright (C) 2010 Red Hat, Inc. All rights reserved.
+#
+#     This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Author: Petr Holasek , pholasek@redhat.com
+
 import pygtk
 pygtk.require('2.0')
 import gtk
 import os
 import sys
+import array
+import time
 from ctypes import *
 
 class KPAGEMAP_T(Structure):
@@ -19,7 +39,7 @@ class PAGEMAP_LIST(Structure):
 class PAGEMAP_T(Structure):
     _fields_ = [("pid", c_int),
         ("mappings", POINTER(PROC_MAPPING)),
-        ("cmdline", c_char_p),
+        ("cmdline", c_char * 128),
         ("uss", c_ulong),
         ("pss", c_ulong),
         ("swap", c_ulong),
@@ -85,6 +105,9 @@ class PagemapData:
 
     def refresh_pagecount(self):
         self.pagecount = self.get_ram_size(self.table)
+
+    def get_pagecount(self):
+        self.refresh_pagecount()
         return self.pagecount
 
     def get_count(self,page):
@@ -104,31 +127,89 @@ class Painter:
     '''
     Class which invoke gtk paintings of pgmap_data class to Window
     '''
+
     def __init__(self):
         self.pagemap = PagemapData()
+        time.sleep(3)
+        self.pagemap.refresh_procs()
+        self.pgcnt = self.pagemap.get_pagecount()
+        self.scr_w = 1024
+        self.scr_h = self.pgcnt/self.scr_w
+        self.canvas = MemoryCanvas(self.scr_w,self.scr_h)
+        self.pixbuff = array.array('B', '\0'*(3*self.scr_w*self.scr_h+1024))
 
     def test(self):
         self.pagemap.refresh_procs()
-        print self.pagemap.refresh_pagecount()
-        print bin(self.pagemap.get_count(80000))
-        print bin(self.pagemap.get_flags(80000))
+        self.pagemap.refresh_pagecount()
+        ## prints sharing of all pages in system
 
     def __page2pixel(self,page):
+        '''
+        For drawing
+        '''
         pass
 
-    def init_drawing(self):
+    def __pixel2page(self,x,y):
+        '''
+        For taking of page address from mouse pointer mem-picture
+        '''
         pass
 
-class Window: # There will be PagemapData instance
+    def draw_it(self):
+        self.canvas.draw_pixbuff(self.pixbuff.tostring())
+
+    def kpgcnt_pixbuff(self):
+        for i in range(self.pgcnt):
+            cnt = self.pagemap.get_count(i)
+            if cnt > 0:
+                self.pixbuff[3 * i] = 255
+            else:
+                self.pixbuff[3 * i] = 100
+
+    def kpgflg_pixbuff(self):
+        pass
+
+
+    def main(self):
+        gtk.main()
+        return 0
+
+class MemoryCanvas: 
     '''
     Graphical part of application
     '''
-    def __init__(self):
-        pass
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        window.set_title("picture of memory")
+        window.connect("destroy", lambda w: gtk.main_quit())
+        self.area = gtk.DrawingArea()
+        self.area.set_size_request(width, height) 
+        self.sw = gtk.ScrolledWindow()
+        self.sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+        window.add(self.sw)
+        self.sw.add_with_viewport(self.area)
+
+        self.sw.show()
+        self.area.show()
+        window.show()
+        self.style = self.area.get_style()
+        self.gc = self.style.fg_gc[gtk.STATE_NORMAL]
+
+    def draw_pixbuff(self, buff):
+        '''
+        Buffer is passed as string
+        '''
+        self.area.window.draw_rgb_image(self.gc, 0, 0, self.width, self.height,
+                gtk.gdk.RGB_DITHER_NONE, buff, self.width*3)
+
 
 if __name__ == "__main__":
     p = Painter()
-    p.test()
+    p.kpgcnt_pixbuff()
+    p.draw_it()
+    p.main()
 
     
     
