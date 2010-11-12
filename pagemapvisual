@@ -25,150 +25,95 @@ import os
 import sys
 import array
 import time
-from ctypes import *
+import threading
+import gobject
+import argparse
+import pagemapdata
 
-class KPAGEMAP_T(Structure):
-    pass
+#TODO: parametr for distinguish what to count
+class CountThread(threading.Thread):
+    def __init__(self, painter):
+        self.painter = painter
+        threading.Thread.__init__(self)
+    def run (self):
+        while True:
+            p.refresh_kcount()
+            p.kpgcnt_pixbuff()
 
-class PROC_MAPPING(Structure):
-    pass
+parser = argparse.ArgumentParser()
+parser.add_argument('--count', action='store_true')
+parser.add_argument('--flags', action='store_true')
 
-class PAGEMAP_LIST(Structure):
-    pass
-
-class PAGEMAP_T(Structure):
-    _fields_ = [("pid", c_int),
-        ("mappings", POINTER(PROC_MAPPING)),
-        ("cmdline", c_char * 128),
-        ("uss", c_ulong),
-        ("pss", c_ulong),
-        ("swap", c_ulong),
-        ("res", c_ulong),
-        ("shr", c_ulong),
-        ("n_drt", c_ulong),
-        ("n_uptd", c_ulong),
-        ("n_wback", c_ulong),
-        ("n_err", c_ulong),
-        ("n_lck", c_ulong),
-        ("n_slab", c_ulong),
-        ("n_buddy", c_ulong),
-        ("n_cmpndh", c_ulong),
-        ("n_cmpndt", c_ulong),
-        ("n_ksm", c_ulong),
-        ("n_hwpois", c_ulong),
-        ("n_huge", c_ulong),
-        ("n_npage", c_ulong),
-        ("n_mmap", c_ulong),
-        ("n_anon", c_ulong),
-        ("n_swpche", c_ulong),
-        ("n_swpbck", c_ulong),
-        ("n_onlru", c_ulong),
-        ("n_actlru", c_ulong),
-        ("n_unevctb", c_ulong),
-        ("n_referenced", c_ulong),
-        ("n_2recycle", c_ulong)
-    ]
-
-class PAGEMAP_TBL(Structure):
-    _fields_ = [("start", POINTER(PAGEMAP_LIST)),
-        ("curr", POINTER(PAGEMAP_LIST)),
-        ("size", c_ulong),
-        ("flags", c_int),
-        ("kpagemap", POINTER(KPAGEMAP_T))
-    ]
-
-class PagemapData:
-    '''
-    Class which encapsulate libpagemap operations
-    '''
-    def __init__(self):
-        libpagemap = cdll.LoadLibrary("libpagemap.so")
-        self.init_pgmap_table = libpagemap.init_pgmap_table
-        self.init_pgmap_table.restype = POINTER(PAGEMAP_TBL)
-        self.open_pgmap_table = libpagemap.open_pgmap_table
-        self.open_pgmap_table.restype = POINTER(PAGEMAP_TBL)
-        self.reset_table_pos = libpagemap.reset_table_pos
-        self.iterate_over_all = libpagemap.iterate_over_all
-        self.iterate_over_all.restype = POINTER(PAGEMAP_T) 
-        self.get_ram_size = libpagemap.get_ram_size
-        self.get_ram_size.restype = c_ulonglong
-        self.get_kpgcnt = libpagemap.get_kpgcnt
-        self.get_kpgcnt.restype = c_ulonglong
-        self.get_kpgflg = libpagemap.get_kpgflg
-        self.get_kpgflg.restype = c_ulonglong
-
-        self.table = pointer(PAGEMAP_TBL())
-        self.pagecount = 0
-
-    def refresh_procs(self):
-        self.table = self.init_pgmap_table(self.table)
-
-    def refresh_pagecount(self):
-        self.pagecount = self.get_ram_size(self.table)
-
-    def get_pagecount(self):
-        self.refresh_pagecount()
-        return self.pagecount
-
-    def get_count(self,page):
-        return self.get_kpgcnt(self.table, page)
-
-    def get_flags(self,page):
-        return self.get_kpgflg(self.table, page)
-
-    def refresh_data(self):
-        #self.open_pgmap_table(self.table) 
-        pass
-
-    def clean_data(self):
-        pass #close 
 
 class Painter:
     '''
     Class which invoke gtk paintings of pgmap_data class to Window
     '''
 
-    def __init__(self):
-        self.pagemap = PagemapData()
-        time.sleep(3)
-        self.pagemap.refresh_procs()
+    def __init__(self,args):
+        self.args = args
+        self.pagemap = pagemapdata.PagemapData()
         self.pgcnt = self.pagemap.get_pagecount()
         self.scr_w = 1024
-        self.scr_h = self.pgcnt/self.scr_w
+        self.scr_h = (self.pgcnt+1023)/self.scr_w
+        print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
         self.canvas = MemoryCanvas(self.scr_w,self.scr_h)
-        self.pixbuff = array.array('B', '\0'*(3*self.scr_w*self.scr_h+1024))
+        #self.refresh_timer()
+        if self.args.count:
+            self.refresh_kcount()
+            self.kpgcnt_pixbuff()
+        elif self.args.flags:
+            self.refresh_kflags()
+            self.kpgflg_pixbuff()
 
     def test(self):
-        self.pagemap.refresh_procs()
-        self.pagemap.refresh_pagecount()
+        pass
         ## prints sharing of all pages in system
 
-    def __page2pixel(self,page):
-        '''
-        For drawing
-        '''
-        pass
 
-    def __pixel2page(self,x,y):
+    def pixel2page(self,x,y):
         '''
         For taking of page address from mouse pointer mem-picture
         '''
         pass
 
     def draw_it(self):
-        self.canvas.draw_pixbuff(self.pixbuff.tostring())
+        self.canvas.draw_pixbuff()
+
+    def refresh_kcount(self):
+        self.pagemap.fill_count()
+
+    def refresh_kflags(self):
+        self.pagemap.fill_flags()
 
     def kpgcnt_pixbuff(self):
         for i in range(self.pgcnt):
             cnt = self.pagemap.get_count(i)
             if cnt > 0:
-                self.pixbuff[3 * i] = 255
+                self.canvas.set_RGB4page(i,min(255, cnt * 30 + 100))
             else:
-                self.pixbuff[3 * i] = 100
+                self.canvas.set_RGB4page(i,0)
+
+        self.draw_it()
 
     def kpgflg_pixbuff(self):
-        pass
+        for i in range(self.pgcnt):
+            flags = self.pagemap.get_flags(i)
+            if flags & (1L << 20): # NOPAGE
+                self.canvas.set_RGB4page(i,0)
+            elif flags & (1L << 4): # DIRTY
+                self.canvas.set_RGB4page(i,255)
+            elif flags & (1L << 13): #SWAPCACHE
+                self.canvas.set_RGB4page(i,0,255)
+            elif flags & (1L << 12): #ANON
+                self.canvas.set_RGB4page(i,0,0,255)
 
+        self.draw_it()
+
+    def refresh_timer(self):
+        self.refresh_kcount()
+        self.kpgcnt_pixbuff()
+        gobject.timeout_add(300, self.refresh_timer)
 
     def main(self):
         gtk.main()
@@ -181,11 +126,14 @@ class MemoryCanvas:
     def __init__(self, width, height):
         self.width = width
         self.height = height
+        # WHY ?
+        self.pixbuff = array.array('B', '\0'*(3*self.width*(self.height+32)))
         window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         window.set_title("picture of memory")
         window.connect("destroy", lambda w: gtk.main_quit())
         self.area = gtk.DrawingArea()
-        self.area.set_size_request(width, height) 
+        self.area.set_size_request(self.width, self.height) 
+        self.area.connect("expose-event", self.area_redraw)
         self.sw = gtk.ScrolledWindow()
         self.sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
         window.add(self.sw)
@@ -197,19 +145,54 @@ class MemoryCanvas:
         self.style = self.area.get_style()
         self.gc = self.style.fg_gc[gtk.STATE_NORMAL]
 
-    def draw_pixbuff(self, buff):
+    def page2pixel(self,page):
+        '''
+        Place page into block of 1024 pages (usually 4MB)
+        '''
+        block_seq = int(page) / 1024
+        x = block_seq % 32 * 32 + (page % 1024) % 32
+        y = block_seq / 32 * 32 + (page % 1024) / 32
+        return x, y
+
+    def pixel2page(self, x, y):
+        '''
+        Computes pixels of page on pixel
+        '''
+        #Stolen code O_o
+        #block = ((y >> 5) << 5) + (x >> 5)
+        #return (block << 10) + ((y & 31) << 5) + (x & 31)
+
+    def set_RGB4page(self, page, red, green=0, blue=0):
+        x, y = self.page2pixel(page)
+        pos = y * 1024 + x
+
+        try:
+            self.pixbuff[pos*3] = red
+            self.pixbuff[pos*3 + 1] = green
+            self.pixbuff[pos*3 + 2] = blue
+        except:
+            print "ERR:",pos*3
+
+    def draw_pixbuff(self):
         '''
         Buffer is passed as string
         '''
         self.area.window.draw_rgb_image(self.gc, 0, 0, self.width, self.height,
-                gtk.gdk.RGB_DITHER_NONE, buff, self.width*3)
+                gtk.gdk.RGB_DITHER_NONE, self.pixbuff.tostring(), self.width*3)
+
+    def area_redraw(self, area, event):
+        '''
+        expose-event handler
+        '''
+        self.draw_pixbuff()
+        return True
 
 
 if __name__ == "__main__":
-    p = Painter()
-    p.kpgcnt_pixbuff()
-    p.draw_it()
-    p.main()
+    args = parser.parse_args()
+    p = Painter(args)
+    gtk.main()
+    
 
     
     
