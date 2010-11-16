@@ -1,26 +1,23 @@
 #
 # libpagemap Makefile
 #
-CUR	:= 0
-REV := 0
-AGE := 0
 
-LIBTOOL     := libtool
-CMODE		:= --mode=compile
-LMODE		:= --mode=link
-IMODE		:= --mode=install
-CLMODE		:= --mode=clean
-UMODE		:= --mode=uninstall
-VERSION     := -version-info $(CUR):$(REV):$(AGE)
-
+MAJOR 		:= 0
+MINOR		:= 0
+MICRO 		:= 0
+VERSION		:= $(MAJOR).$(MINOR).$(MICRO)
 CC			:= gcc
 CFLAGS 		:= -std=c99 -Wall -g
-INSTALL     := install -D --owner=0 --group=0 
+LFLAGS		:= -fPIC
+INSTALL     := install -D #--owner=0 --group=0 
 LIB64       := lib$(shell [ -d /usr/lib64 ] && echo 64)
+LNAME 		:= libpagemap.so
+SONAME		:= $(LNAME).$(MAJOR)
 
-USRLIB                  := /usr/$(LIB64)
-USRINCLUDE              := /usr/include/
-USRBIN                  := /usr/bin/
+USRLIB                  := $(DESTDIR)/usr/$(LIB64)
+USRINCLUDE              := $(DESTDIR)/usr/include
+USRBIN                  := $(DESTDIR)/usr/bin
+MANDIR					:= $(DESTDIR)/usr/share/man/man1
 KMAJOR :=$(shell uname -r | cut -f1 -d.)
 KMINOR :=$(shell uname -r | cut -f2 -d.)
 KMICRO :=$(shell uname -r | cut -f3 -d.)
@@ -31,31 +28,31 @@ ifneq ($(KVERSION),true)
 	exit 2
 endif
 
-all: pgmap
+all: libpagemap.so pgmap
 
-libpagemap.lo: libpagemap.c libpagemap.h
-	$(LIBTOOL) $(CMODE) $(CC) $(CFLAGS) -c libpagemap.c
+libpagemap.o: libpagemap.c libpagemap.h
+	$(CC) $(CFLAGS) $(LFLAGS) -c libpagemap.c
 
-libpagemap.la: libpagemap.lo
-	$(LIBTOOL) $(LMODE) $(CC) $(CFLAGS) $(VERSION) -o libpagemap.la libpagemap.lo \
-    	 -rpath $(USRLIB)
+libpagemap.so: libpagemap.o
+	$(CC) $(CFLAGS) -shared -Wl,-soname,$(SONAME) -o libpagemap.so.$(VERSION) libpagemap.o -lc
+	ln -s libpagemap.so.$(VERSION) $(SONAME)
 
 pgmap.o: pgmap.c
 	$(CC) $(CFLAGS) -c pgmap.c 
 
-pgmap: pgmap.o libpagemap.la
-	$(LIBTOOL) $(LMODE) $(CC) $(CFLAGS) -o pgmap pgmap.o libpagemap.la
+pgmap: pgmap.o libpagemap.so
+	$(CC) $(CFLAGS) -o pgmap pgmap.o $(SONAME)
 
 clean:
-	$(LIBTOOL) $(CLMODE) rm -f pgmap libpagemap.la *.o *.la *.lo
+	rm -f pgmap libpagemap.la *.o *.la *.lo *.so*
 
-install: libpagemap.la pgmap
-	$(LIBTOOL) $(IMODE) $(INSTALL) libpagemap.la $(USRLIB)
-	$(LIBTOOL) --finish $(USRLIB)
-	$(LIBTOOL) $(IMODE) $(INSTALL) pgmap $(USRBIN)
+install: 
+	$(INSTALL) libpagemap.so.$(VERSION) $(USRLIB)/libpagemap.so.$(VERSION)
+	cd $(USRLIB) && ln -s $(LNAME).$(VERSION) $(SONAME) && cd -
+	$(INSTALL) pgmap $(USRBIN)/pgmap
+	$(INSTALL) pgmap.1.gz $(MANDIR)/pgmap.1.gz
+	$(INSTALL) libpagemap.h $(USRINCLUDE)/libpagemap.h
+	
 
-uninstall: clean
-	$(LIBTOOL) $(UMODE) rm -f $(USRLIB)/libpagemap.la
-	rm -f $(USRBIN)pgmap
 
 	

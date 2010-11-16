@@ -432,7 +432,6 @@ static int walk_proc_mem(pagemap_t * p_t, pagemap_tbl * table) {
     sprintf(pagemap_p,"/proc/%d/pagemap",p_t->pid);
     pagemap_fd = open(pagemap_p,O_RDONLY);
     if (pagemap_fd < 0) {
-        printf("Err in pid:%u\n", p_t->pid);
         trace("error pagemap open");
         return ERROR;
     }
