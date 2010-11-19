@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # pagemapvisual - tool for graphical representation of pagemap interface
 # Copyright (C) 2010 Red Hat, Inc. All rights reserved.
@@ -30,7 +30,13 @@ import gobject
 import argparse
 import pagemapdata
 
-#TODO: parametr for distinguish what to count
+#TODO: Threads? :D
+#      Draw legend
+#      Patch kernel => slab distortion
+#      /proc/[pid]/pagemap stuff
+#      Legend and canvas alongside
+#      Zoom :D
+
 class CountThread(threading.Thread):
     def __init__(self, painter):
         self.painter = painter
@@ -57,25 +63,16 @@ class Painter:
         self.scr_w = 1024
         self.scr_h = (self.pgcnt+1023)/self.scr_w
         print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
+        self.legend = Legend(150,300,self.args)
         self.canvas = MemoryCanvas(self.scr_w,self.scr_h)
         #self.refresh_timer()
-        if self.args.count:
-            self.refresh_kcount()
-            self.kpgcnt_pixbuff()
-        elif self.args.flags:
-            self.refresh_kflags()
-            self.kpgflg_pixbuff()
-
-    def test(self):
-        pass
-        ## prints sharing of all pages in system
-
-
-    def pixel2page(self,x,y):
-        '''
-        For taking of page address from mouse pointer mem-picture
-        '''
-        pass
+        if True:
+            if self.args.count:
+                self.refresh_kcount()
+                self.kpgcnt_pixbuff()
+            elif self.args.flags:
+                self.refresh_kflags()
+                self.kpgflg_pixbuff()
 
     def draw_it(self):
         self.canvas.draw_pixbuff()
@@ -119,6 +116,60 @@ class Painter:
         gtk.main()
         return 0
 
+class Legend:
+    '''
+    Window with briefing of colours of pagemap visualization
+    '''
+    def __init__(self, width, height, type):
+        self.width = width
+        self.height = height
+        self.type = type
+        window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        window.set_default_size(self.width, self.height)
+        window.set_title('Legend')
+        window.connect('destroy', lambda w: gtk.main_quit)
+        window.set_border_width(5)
+
+        main_box = gtk.VBox(False, 1)
+        window.add(main_box)
+
+        self.frame_page = gtk.Frame('Address of current page')
+        self.label_page = gtk.Label('0xdeadbeef')
+        self.frame_page.add(self.label_page)
+        main_box.pack_start(self.frame_page,False,False,0)
+        if self.type.count:
+            self.frame_data = gtk.Frame('Current page count')
+        elif self.type.flags:
+            self.frame_data = gtk.Frame('Current page flags')
+        else:
+            self.frame_data = gtk.Frame('Wrong args')
+        self.label_data = gtk.Label('0xdeadbeef')
+        self.frame_data.add(self.label_data)
+        main_box.pack_start(self.frame_data,False,False,0)
+
+        # Draw graphic legend
+        if self.type.count:
+            self.g_legend = self.g_count()
+        elif self.type.flags:
+            self.g_legend = self.g_flags()
+        else:
+            self.g_legend = None
+
+        window.show_all()
+
+    def set_data(self, page):
+        self.label_page.set_text("0x%016x" % (page*4096))
+        if self.type.count:
+            self.label_data.set_text("%d" % p.pagemap.get_count(page))
+        elif self.type.flags:
+            self.label_data.set_text(bin(p.pagemap.get_flags(page)))
+
+    def g_count(self):
+        pass
+
+    def g_flags(self):
+        pass
+
 class MemoryCanvas: 
     '''
     Graphical part of application
@@ -129,11 +180,15 @@ class MemoryCanvas:
         # WHY ?
         self.pixbuff = array.array('B', '\0'*(3*self.width*(self.height+32)))
         window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        window.set_title("picture of memory")
+        window.set_title("Pagemapvisual")
         window.connect("destroy", lambda w: gtk.main_quit())
+        window.set_default_size(self.width, self.height)
         self.area = gtk.DrawingArea()
         self.area.set_size_request(self.width, self.height) 
+        self.area.set_events(gtk.gdk.POINTER_MOTION_MASK |
+                             gtk.gdk.POINTER_MOTION_HINT_MASK )
         self.area.connect("expose-event", self.area_redraw)
+        self.area.connect("motion-notify-event", self.motion_event)
         self.sw = gtk.ScrolledWindow()
         self.sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
         window.add(self.sw)
@@ -144,6 +199,14 @@ class MemoryCanvas:
         window.show()
         self.style = self.area.get_style()
         self.gc = self.style.fg_gc[gtk.STATE_NORMAL]
+
+    def motion_event(self, area, event):
+        '''
+        Callback for mouse-moves over widget
+        '''
+        x,y = area.get_pointer()
+        page = self.pixel2page(x,y)
+        p.legend.set_data(page)
 
     def page2pixel(self,page):
         '''
@@ -159,8 +222,8 @@ class MemoryCanvas:
         Computes pixels of page on pixel
         '''
         #Stolen code O_o
-        #block = ((y >> 5) << 5) + (x >> 5)
-        #return (block << 10) + ((y & 31) << 5) + (x & 31)
+        block = ((y >> 5) << 5) + (x >> 5)
+        return (block << 10) + ((y & 31) << 5) + (x & 31)
 
     def set_RGB4page(self, page, red, green=0, blue=0):
         x, y = self.page2pixel(page)
