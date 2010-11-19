@@ -62,10 +62,12 @@ class Painter:
         self.pgcnt = self.pagemap.get_pagecount()
         self.scr_w = 1024
         self.scr_h = (self.pgcnt+1023)/self.scr_w
+        self.count_int = 30;
+        self.count_base = 100;
         print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
-        self.legend = Legend(150,300,self.args)
-        self.canvas = MemoryCanvas(self.scr_w,self.scr_h)
         #self.refresh_timer()
+
+    def paint(self):
         if True:
             if self.args.count:
                 self.refresh_kcount()
@@ -75,7 +77,7 @@ class Painter:
                 self.kpgflg_pixbuff()
 
     def draw_it(self):
-        self.canvas.draw_pixbuff()
+        canvas.draw_pixbuff()
 
     def refresh_kcount(self):
         self.pagemap.fill_count()
@@ -87,9 +89,9 @@ class Painter:
         for i in range(self.pgcnt):
             cnt = self.pagemap.get_count(i)
             if cnt > 0:
-                self.canvas.set_RGB4page(i,min(255, cnt * 30 + 100))
+                canvas.set_RGB4page(i,min(255, cnt * self.count_int + self.count_base))
             else:
-                self.canvas.set_RGB4page(i,0)
+                canvas.set_RGB4page(i,0)
 
         self.draw_it()
 
@@ -97,13 +99,13 @@ class Painter:
         for i in range(self.pgcnt):
             flags = self.pagemap.get_flags(i)
             if flags & (1L << 20): # NOPAGE
-                self.canvas.set_RGB4page(i,0)
+                canvas.set_RGB4page(i,0)
             elif flags & (1L << 4): # DIRTY
-                self.canvas.set_RGB4page(i,255)
+                canvas.set_RGB4page(i,255)
             elif flags & (1L << 13): #SWAPCACHE
-                self.canvas.set_RGB4page(i,0,255)
+                canvas.set_RGB4page(i,0,255)
             elif flags & (1L << 12): #ANON
-                self.canvas.set_RGB4page(i,0,0,255)
+                canvas.set_RGB4page(i,0,0,255)
 
         self.draw_it()
 
@@ -124,14 +126,14 @@ class Legend:
         self.width = width
         self.height = height
         self.type = type
-        window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        window.set_default_size(self.width, self.height)
-        window.set_title('Legend')
-        window.connect('destroy', lambda w: gtk.main_quit)
-        window.set_border_width(5)
+        self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        self.window.set_default_size(self.width, self.height)
+        self.window.set_title('Legend')
+        self.window.connect('destroy', lambda w: gtk.main_quit)
+        self.window.set_border_width(5)
 
         main_box = gtk.VBox(False, 1)
-        window.add(main_box)
+        self.window.add(main_box)
 
         self.frame_page = gtk.Frame('Address of current page')
         self.label_page = gtk.Label('0xdeadbeef')
@@ -146,16 +148,20 @@ class Legend:
         self.label_data = gtk.Label('0xdeadbeef')
         self.frame_data.add(self.label_data)
         main_box.pack_start(self.frame_data,False,False,0)
+        self.area = gtk.DrawingArea()
+        main_box.pack_start(self.area,False,False,0)
 
-        # Draw graphic legend
+        self.window.show_all()
+
+        self.gc = self.area.style.fg_gc[gtk.STATE_NORMAL]
+
+    def draw_info(self):
         if self.type.count:
             self.g_legend = self.g_count()
         elif self.type.flags:
             self.g_legend = self.g_flags()
         else:
             self.g_legend = None
-
-        window.show_all()
 
     def set_data(self, page):
         self.label_page.set_text("0x%016x" % (page*4096))
@@ -165,7 +171,9 @@ class Legend:
             self.label_data.set_text(bin(p.pagemap.get_flags(page)))
 
     def g_count(self):
-        pass
+        base = p.count_base
+        interval = p.count_int
+        self.area.draw_rectangle(self.gc, TRUE, 0,0,100,100)
 
     def g_flags(self):
         pass
@@ -206,7 +214,7 @@ class MemoryCanvas:
         '''
         x,y = area.get_pointer()
         page = self.pixel2page(x,y)
-        p.legend.set_data(page)
+        legend.set_data(page)
 
     def page2pixel(self,page):
         '''
@@ -254,6 +262,10 @@ class MemoryCanvas:
 if __name__ == "__main__":
     args = parser.parse_args()
     p = Painter(args)
+    legend = Legend(150,300,args)
+    canvas = MemoryCanvas(p.scr_w, p.scr_h)
+    legend.draw_info()
+    p.paint()
     gtk.main()
     
 

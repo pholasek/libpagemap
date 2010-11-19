@@ -1,0 +1,38 @@
+.\” Pgmap utility
+.\” Contact pholasek@redhat.com 
+.TH PGMAP 1 "15 Nov 2010" "pgmap" "User Commands"
+.SH NAME
+pgmap \- utility for getting information from kernel's pagemap interface
+.SH SYNOPSIS
+pgmap [-ndpFPs]
+.SH DESCRIPTION
+Pgmap utility gets informations from /proc/kpagecount, /proc/kpageflags and /proc/[pid]/pagemap. 
+Using libpagemap library for that.
+.SH OPTIONS
+.TP
+.B \-h 
+for help
+.TP
+.B \-n
+simulate non-root = only RES and SWAP
+.TP
+.B \-d
+without headers
+.TP
+.B \-p
+prints numbers in pages (instead of default kB)
+.TP
+.B \-F
+prints info from kpageflags file
+.TP
+.B \-P pid
+prints only specified pid
+.TP
+.B \-s ID
+sorting by [uss|pss|shr|res|swap|pid][+-]
+.SH SEE ALSO
+\fBsmem\fP(8)
+.SH BUGS
+\-
+.SH AUTHOR
+Petr Holasek (pholasek@redhat.com)
