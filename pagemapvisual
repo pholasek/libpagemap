@@ -128,6 +128,7 @@ class Legend:
         self.type = type
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.set_default_size(self.width, self.height)
+        self.window.set_resizable(0)
         self.window.set_title('Legend')
         self.window.connect('destroy', lambda w: gtk.main_quit)
         self.window.set_border_width(5)
@@ -149,7 +150,13 @@ class Legend:
         self.frame_data.add(self.label_data)
         main_box.pack_start(self.frame_data,False,False,0)
         self.area = gtk.DrawingArea()
-        main_box.pack_start(self.area,False,False,0)
+        self.area.set_size_request(100,200) 
+        self.area.set_events(gtk.gdk.POINTER_MOTION_MASK |
+                             gtk.gdk.POINTER_MOTION_HINT_MASK )
+        self.area.connect("expose-event", self.area_redraw)
+        self.frame_legend = gtk.Frame('Pagecount color scaling')
+        self.frame_legend.add(self.area)
+        main_box.pack_start(self.frame_legend,False,False,0)
 
         self.window.show_all()
 
@@ -171,12 +178,42 @@ class Legend:
             self.label_data.set_text(bin(p.pagemap.get_flags(page)))
 
     def g_count(self):
+        gc = self.area.window.new_gc()
         base = p.count_base
         interval = p.count_int
-        self.area.draw_rectangle(self.gc, TRUE, 0,0,100,100)
+        corner = 0
+        i = 1
+        rect_h = 50
+        # draw a legend!
+        #self.area.window.draw_rectangle(gc, True,0,corner,self.width/2,rect_h)
+        corner += rect_h
+        gc.set_rgb_fg_color(gtk.gdk.color_parse('#FF0000'))
+        self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,rect_h)
+        # udelat to s pomoci color_parse, kdyz to nealokuje
+
+        #print 'color',color.red, color.green, color.blue
+        #print 'gc',gc.foreground.red, gc.foreground.green, gc.foreground.blue
+#
+#        while color.red <= 255:
+#            self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,rect_h)
+#            corner += rect_h
+#            i += 1
+#            color.red = base + i*interval
+#            gc.set_rgb_fg_color(color)
+#            print 'color',color.red, color.green, color.blue
+#            print 'gc',gc.foreground.red, gc.foreground.green, gc.foreground.blue
+#
+#        self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,rect_h)
 
     def g_flags(self):
         pass
+
+    def area_redraw(self, area, event):
+        '''
+        expose-event handler
+        '''
+        self.draw_info()
+        return True
 
 class MemoryCanvas: 
     '''

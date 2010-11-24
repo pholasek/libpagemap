@@ -9,7 +9,7 @@ VERSION		:= $(MAJOR).$(MINOR).$(MICRO)
 CC			:= gcc
 CFLAGS 		:= $(CFLAGS) -std=c99
 LFLAGS		:= -fPIC
-INSTALL     := install -D #--owner=0 --group=0 
+INSTALL     := install -Dp #--owner=0 --group=0 
 LIB64       := lib$(shell [ -d /usr/lib64 ] && echo 64)
 LNAME 		:= libpagemap.so
 SONAME		:= $(LNAME).$(MAJOR)
@@ -34,8 +34,8 @@ libpagemap.o: libpagemap.c libpagemap.h
 	$(CC) $(CFLAGS) $(LFLAGS) -c libpagemap.c
 
 libpagemap.so: libpagemap.o
-	$(CC) $(CFLAGS) -shared -Wl,-soname,$(SONAME) -o libpagemap.so.$(VERSION) libpagemap.o -lc
-	ln -s libpagemap.so.$(VERSION) $(SONAME)
+	$(CC) $(CFLAGS) -shared -Wl,-soname,$(SONAME) -o $(LNAME).$(VERSION) libpagemap.o -lc
+	ln -s $(LNAME).$(VERSION) $(SONAME)
 
 pgmap.o: pgmap.c
 	$(CC) $(CFLAGS) -c pgmap.c 
@@ -47,11 +47,11 @@ clean:
 	rm -f pgmap libpagemap.la *.o *.la *.lo *.so*
 
 install: 
-	$(INSTALL) libpagemap.so.$(VERSION) $(USRLIB)/libpagemap.so.$(VERSION)
-	cd $(USRLIB) && ln -s $(LNAME).$(VERSION) $(SONAME) && cd -
+	$(INSTALL) $(LNAME).$(VERSION) $(USRLIB)/$(LNAME).$(VERSION)
+	cd $(USRLIB) && ln -s $(LNAME).$(VERSION) $(SONAME) && ln -s $(LNAME).$(VERSION) $(LNAME) && cd -
 	$(INSTALL) pgmap $(USRBIN)/pgmap
 	$(INSTALL) pgmap.1 $(MANDIR)/pgmap.1
-	$(INSTALL) libpagemap.h $(USRINCLUDE)/libpagemap.h
+	$(INSTALL) -m 0644 libpagemap.h $(USRINCLUDE)/libpagemap.h
 	
 
 
