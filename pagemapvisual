@@ -29,6 +29,7 @@ import threading
 import gobject
 import argparse
 import pagemapdata
+import pango
 
 #TODO: Threads? :D
 #      Draw legend
@@ -63,7 +64,7 @@ class Painter:
         self.scr_w = 1024
         self.scr_h = (self.pgcnt+1023)/self.scr_w
         self.count_int = 30;
-        self.count_base = 100;
+        self.count_base = 80;
         print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
         #self.refresh_timer()
 
@@ -98,14 +99,30 @@ class Painter:
     def kpgflg_pixbuff(self):
         for i in range(self.pgcnt):
             flags = self.pagemap.get_flags(i)
-            if flags & (1L << 20): # NOPAGE
-                canvas.set_RGB4page(i,0)
-            elif flags & (1L << 4): # DIRTY
-                canvas.set_RGB4page(i,255)
-            elif flags & (1L << 13): #SWAPCACHE
-                canvas.set_RGB4page(i,0,255)
-            elif flags & (1L << 12): #ANON
-                canvas.set_RGB4page(i,0,0,255)
+            if flags & (1L << 10): # BUDDY
+                canvas.set_RGB4page(i,0,0,0)
+                continue
+
+            if flags & (1L << 7): # SLAB
+                canvas.set_RGB4page(i,255,255,255)
+                continue
+
+            if flags & 1:
+                canvas.set_RGB4page(i,-1,255,-1) # LOCKED
+            else:
+                canvas.set_RGB4page(i,-1,0,-1)
+
+            if flags & (1L << 4): # DIRTY
+                canvas.set_RGB4page(i,255,-1,-1)
+            else:
+                canvas.set_RGB4page(i,0,-1,-1)
+
+            if flags & (1L << 5): # LRU
+                canvas.set_RGB4page(i,-1,-1,128)
+            elif flags & (1L << 6): # ACTIVE
+                canvas.set_RGB4page(i,-1,-1,255)
+            else:
+                canvas.set_RGB4page(i,-1,-1,0)
 
         self.draw_it()
 
@@ -126,6 +143,7 @@ class Legend:
         self.width = width
         self.height = height
         self.type = type
+        self.rect_h = 30
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.set_default_size(self.width, self.height)
         self.window.set_resizable(0)
@@ -135,6 +153,25 @@ class Legend:
 
         main_box = gtk.VBox(False, 1)
         self.window.add(main_box)
+
+        mb = gtk.MenuBar()
+        filemenu = gtk.Menu()
+        helpmenu = gtk.Menu()
+        filem = gtk.MenuItem("File")
+        helpm = gtk.MenuItem("Help")
+        filem.set_submenu(filemenu)
+        helpm.set_submenu(helpmenu)
+
+        exit = gtk.MenuItem("Exit")
+        exit.connect("activate", gtk.main_quit)
+        filemenu.append(exit)
+        mb.append(filem)
+        about = gtk.MenuItem("About")
+        about.connect("activate", self.show_about)
+        helpmenu.append(about)
+        mb.append(helpm)
+        
+        main_box.pack_start(mb,False,False,0)
 
         self.frame_page = gtk.Frame('Address of current page')
         self.label_page = gtk.Label('0xdeadbeef')
@@ -150,17 +187,30 @@ class Legend:
         self.frame_data.add(self.label_data)
         main_box.pack_start(self.frame_data,False,False,0)
         self.area = gtk.DrawingArea()
-        self.area.set_size_request(100,200) 
+        self.area.set_size_request(100,(int(255-p.count_base)/p.count_int+2)*self.rect_h) 
         self.area.set_events(gtk.gdk.POINTER_MOTION_MASK |
                              gtk.gdk.POINTER_MOTION_HINT_MASK )
         self.area.connect("expose-event", self.area_redraw)
-        self.frame_legend = gtk.Frame('Pagecount color scaling')
+        self.frame_legend = gtk.Frame('Page info')
         self.frame_legend.add(self.area)
         main_box.pack_start(self.frame_legend,False,False,0)
 
         self.window.show_all()
 
         self.gc = self.area.style.fg_gc[gtk.STATE_NORMAL]
+
+        # define coords of legend
+        self.grid = {}
+        self.box_l = 20
+        if self.type.flags:
+            x = 20
+            y = 30
+            self.grid["BUDDY"] = (x,y*1,"#000000")
+            self.grid["SLAB"] = (x,y*2,"#FFFFFF")
+            self.grid["LOCKED"] = (x,y*3,"#00FF00")
+            self.grid["DIRTY"] = (x,y*4,"#FF0000")
+            self.grid["LRU"] = (x,y*5,"#0000F0")
+            self.grid["LRU_ACTIVE"] = (x,y*6,"#0000FF")
 
     def draw_info(self):
         if self.type.count:
@@ -175,7 +225,41 @@ class Legend:
         if self.type.count:
             self.label_data.set_text("%d" % p.pagemap.get_count(page))
         elif self.type.flags:
-            self.label_data.set_text(bin(p.pagemap.get_flags(page)))
+            self.g_flags_rect()
+
+            gc = self.area.window.new_gc()
+            f = p.pagemap.get_flags(page)
+            self.label_data.set_text(bin(f)[2:].zfill(36))
+            gc.set_rgb_fg_color(gtk.gdk.color_parse('yellow'))
+            if f & (1L << 10): # BUDDY
+                x,y,color = self.grid["BUDDY"]
+                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
+                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
+
+            if f & (1L << 7): # SLAB
+                x,y,color = self.grid["SLAB"]
+                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
+                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
+
+            if f & 1: # LOCKED
+                x,y,color = self.grid["LOCKED"]
+                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
+                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
+
+            if f & (1L << 4): # DIRTY
+                x,y,color = self.grid["DIRTY"]
+                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
+                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
+
+            if f & (1L << 5): # LRU
+                x,y,color = self.grid["LRU"]
+                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
+                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
+
+            if f & (1L << 6): # ACTIVE
+                x,y,color = self.grid["LRU_ACTIVE"]
+                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
+                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
 
     def g_count(self):
         gc = self.area.window.new_gc()
@@ -183,30 +267,50 @@ class Legend:
         interval = p.count_int
         corner = 0
         i = 1
-        rect_h = 50
+        color = base + interval*i;
+        font_desc = pango.FontDescription('courier bold 12')
+        layout = self.area.create_pango_layout('0')
+        layout.set_font_description(font_desc)
         # draw a legend!
-        #self.area.window.draw_rectangle(gc, True,0,corner,self.width/2,rect_h)
-        corner += rect_h
-        gc.set_rgb_fg_color(gtk.gdk.color_parse('#FF0000'))
-        self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,rect_h)
-        # udelat to s pomoci color_parse, kdyz to nealokuje
+        gc.set_rgb_fg_color(gtk.gdk.color_parse('#000000'))
+        self.area.window.draw_rectangle(gc, True,0,corner,self.width/2,self.rect_h)
+        self.area.window.draw_layout(gc, self.width*3/4, corner+self.rect_h/2, layout)
+        corner += self.rect_h
 
-        #print 'color',color.red, color.green, color.blue
-        #print 'gc',gc.foreground.red, gc.foreground.green, gc.foreground.blue
-#
-#        while color.red <= 255:
-#            self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,rect_h)
-#            corner += rect_h
-#            i += 1
-#            color.red = base + i*interval
-#            gc.set_rgb_fg_color(color)
-#            print 'color',color.red, color.green, color.blue
-#            print 'gc',gc.foreground.red, gc.foreground.green, gc.foreground.blue
-#
-#        self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,rect_h)
+        while color < 255:
+            gc.set_rgb_fg_color(gtk.gdk.color_parse('#%X0000' % color))
+            self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,self.rect_h)
+            layout.set_text(str(i))
+            self.area.window.draw_layout(gc, self.width*3/4, corner+self.rect_h/2, layout)
+            corner += self.rect_h
+            i += 1
+            color = base + i*interval
+
+        # more than anything 
+        gc.set_rgb_fg_color(gtk.gdk.color_parse('#FF0000'))
+        self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,self.rect_h)
+        layout.set_text('more')
+        self.area.window.draw_layout(gc, self.width*3/4, corner+self.rect_h/2, layout)
 
     def g_flags(self):
-        pass
+        gc = self.area.window.new_gc()
+        font_desc = pango.FontDescription('courier bold 12')
+        layout = self.area.create_pango_layout('')
+        layout.set_font_description(font_desc)
+
+        for k in self.grid.keys():
+            x,y,color = self.grid[k]
+            gc.set_rgb_fg_color(gtk.gdk.color_parse(color)) 
+            self.area.window.draw_rectangle(gc, True, x, y, self.box_l, self.box_l)
+            layout.set_text(k)
+            self.area.window.draw_layout(gc, x + self.box_l + 15, y, layout)
+
+    def g_flags_rect(self):
+        gc = self.area.window.new_gc()
+        for k in self.grid.keys():
+            x,y,color = self.grid[k]
+            gc.set_rgb_fg_color(gtk.gdk.color_parse(color)) 
+            self.area.window.draw_rectangle(gc, True, x, y, self.box_l, self.box_l)
 
     def area_redraw(self, area, event):
         '''
@@ -214,6 +318,11 @@ class Legend:
         '''
         self.draw_info()
         return True
+
+    def show_about(self, event):
+        #about = AboutDialog()
+        #about.show
+        pass
 
 class MemoryCanvas: 
     '''
@@ -275,9 +384,12 @@ class MemoryCanvas:
         pos = y * 1024 + x
 
         try:
-            self.pixbuff[pos*3] = red
-            self.pixbuff[pos*3 + 1] = green
-            self.pixbuff[pos*3 + 2] = blue
+            if red != -1:
+                self.pixbuff[pos*3] = red
+            if green != -1:
+                self.pixbuff[pos*3 + 1] = green
+            if blue != -1:
+                self.pixbuff[pos*3 + 2] = blue
         except:
             print "ERR:",pos*3
 
@@ -299,7 +411,7 @@ class MemoryCanvas:
 if __name__ == "__main__":
     args = parser.parse_args()
     p = Painter(args)
-    legend = Legend(150,300,args)
+    legend = Legend(150,350,args)
     canvas = MemoryCanvas(p.scr_w, p.scr_h)
     legend.draw_info()
     p.paint()
