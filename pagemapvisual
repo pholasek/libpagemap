@@ -38,6 +38,10 @@ import pango
 #      Legend and canvas alongside
 #      Zoom :D
 
+COUNT = 1
+FLAGS = 2
+PGMAP = 3
+
 class CountThread(threading.Thread):
     def __init__(self, painter):
         self.painter = painter
@@ -66,16 +70,26 @@ class Painter:
         self.count_int = 30;
         self.count_base = 80;
         print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
+        if self.args.count:
+            self.p_type = COUNT
+        elif self.args.flags:
+            self.p_type = FLAGS
+        else:
+            self.p_type = COUNT
         #self.refresh_timer()
 
     def paint(self):
         if True:
-            if self.args.count:
+            if self.p_type == COUNT:
                 self.refresh_kcount()
                 self.kpgcnt_pixbuff()
-            elif self.args.flags:
+            elif self.p_type == FLAGS:
                 self.refresh_kflags()
                 self.kpgflg_pixbuff()
+
+    def change_type(self, new_type):
+        self.p_type = new_type;
+        self.paint();
 
     def draw_it(self):
         canvas.draw_pixbuff()
@@ -139,17 +153,22 @@ class Legend:
     '''
     Window with briefing of colours of pagemap visualization
     '''
-    def __init__(self, width, height, type):
+    def __init__(self, width, height, ltype):
         self.width = width
         self.height = height
-        self.type = type
         self.rect_h = 30
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.set_default_size(self.width, self.height)
         self.window.set_resizable(0)
         self.window.set_title('Legend')
-        self.window.connect('destroy', lambda w: gtk.main_quit)
+        self.window.connect('destroy', lambda p: gtk.main_quit())
         self.window.set_border_width(5)
+        if ltype.count:
+            self.l_type = COUNT
+        elif ltype.flags:
+            self.l_type = FLAGS
+        else:
+            self.l_type = COUNT
 
         main_box = gtk.VBox(False, 1)
         self.window.add(main_box)
@@ -162,6 +181,12 @@ class Legend:
         filem.set_submenu(filemenu)
         helpm.set_submenu(helpmenu)
 
+        sh_cnt = gtk.MenuItem("Show count")
+        sh_cnt.connect("activate", lambda a : self.set_legend(COUNT))
+        filemenu.append(sh_cnt)
+        sh_flg = gtk.MenuItem("Show flags")
+        sh_flg.connect("activate", lambda b : self.set_legend(FLAGS))
+        filemenu.append(sh_flg)
         exit = gtk.MenuItem("Exit")
         exit.connect("activate", gtk.main_quit)
         filemenu.append(exit)
@@ -173,17 +198,12 @@ class Legend:
         
         main_box.pack_start(mb,False,False,0)
 
-        self.frame_page = gtk.Frame('Address of current page')
-        self.label_page = gtk.Label('0xdeadbeef')
+        self.frame_page = gtk.Frame('')
+        self.label_page = gtk.Label('')
         self.frame_page.add(self.label_page)
         main_box.pack_start(self.frame_page,False,False,0)
-        if self.type.count:
-            self.frame_data = gtk.Frame('Current page count')
-        elif self.type.flags:
-            self.frame_data = gtk.Frame('Current page flags')
-        else:
-            self.frame_data = gtk.Frame('Wrong args')
-        self.label_data = gtk.Label('0xdeadbeef')
+        self.frame_data = gtk.Frame('')
+        self.label_data = gtk.Label('')
         self.frame_data.add(self.label_data)
         main_box.pack_start(self.frame_data,False,False,0)
         self.area = gtk.DrawingArea()
@@ -202,7 +222,7 @@ class Legend:
         # define coords of legend
         self.grid = {}
         self.box_l = 20
-        if self.type.flags:
+        if self.l_type == FLAGS:
             x = 20
             y = 30
             self.grid["BUDDY"] = (x,y*1,"#000000")
@@ -212,21 +232,38 @@ class Legend:
             self.grid["LRU"] = (x,y*5,"#0000F0")
             self.grid["LRU_ACTIVE"] = (x,y*6,"#0000FF")
 
+    def draw_body(self):
+        self.frame_page.set_label('Current page address')
+        self.label_page.set_text('0xdeadbeef')
+        if self.l_type == COUNT:
+            self.frame_data.set_label('Current page count')
+        elif self.l_type == FLAGS:
+            self.frame_data.set_label('Current page flags')
+        else:
+            self.frame_data.set_label('')
+        self.label_data.set_text('0xdeadbeef')
+        self.area.window.draw_rectangle(self.gc,True,0,0,self.area.size_request()[0], self.area.size_request()[1]) #fix
+        self.draw_info();
+
+    def set_legend(self, ltype):
+        self.l_type = ltype
+        self.draw_body()
+        p.change_type(ltype)
+
     def draw_info(self):
-        if self.type.count:
+        if self.l_type == COUNT:
             self.g_legend = self.g_count()
-        elif self.type.flags:
+        elif self.l_type == FLAGS:
             self.g_legend = self.g_flags()
         else:
             self.g_legend = None
 
     def set_data(self, page):
         self.label_page.set_text("0x%016x" % (page*4096))
-        if self.type.count:
+        if self.l_type == COUNT:
             self.label_data.set_text("%d" % p.pagemap.get_count(page))
-        elif self.type.flags:
+        elif self.l_type == FLAGS:
             self.g_flags_rect()
-
             gc = self.area.window.new_gc()
             f = p.pagemap.get_flags(page)
             self.label_data.set_text(bin(f)[2:].zfill(36))
@@ -411,9 +448,9 @@ class MemoryCanvas:
 if __name__ == "__main__":
     args = parser.parse_args()
     p = Painter(args)
-    legend = Legend(150,350,args)
     canvas = MemoryCanvas(p.scr_w, p.scr_h)
-    legend.draw_info()
+    legend = Legend(150,350,args)
+    legend.draw_body()
     p.paint()
     gtk.main()
     

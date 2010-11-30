@@ -18,15 +18,15 @@ USRLIB                  := $(DESTDIR)/usr/$(LIB64)
 USRINCLUDE              := $(DESTDIR)/usr/include
 USRBIN                  := $(DESTDIR)/usr/bin
 MANDIR					:= $(DESTDIR)/usr/share/man/man1
-KMAJOR :=$(shell uname -r | cut -f1 -d.)
-KMINOR :=$(shell uname -r | cut -f2 -d.)
-KMICRO :=$(shell uname -r | cut -f3 -d.)
-KVERSION := $(shell [ $(KMAJOR) -eq 2 ] && [ $(KMINOR) -ge 6 ] && [ $(KMICRO) -ge 25 ] && echo true)
+#KMAJOR :=$(shell uname -r | cut -f1 -d.)
+#KMINOR :=$(shell uname -r | cut -f2 -d.)
+#KMICRO :=$(shell uname -r | cut -f3 -d.)
+#KVERSION := $(shell [ $(KMAJOR) -eq 2 ] && [ $(KMINOR) -ge 6 ] && [ $(KMICRO) -ge 25 ] && echo true)
 
-ifneq ($(KVERSION),true) 
-	@echo "Your kernel is too old."
-	exit 2
-endif
+#ifneq ($(KVERSION),true) 
+#	@echo "Your kernel is too old."
+#	exit 2
+#endif
 
 all: libpagemap.so pgmap
 
