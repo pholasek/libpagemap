@@ -32,7 +32,7 @@ import pagemapdata
 import pango
 
 #TODO: Threads? :D
-#      Draw legend
+#      Speed-up pagemapdata.py module and do some refresh stuff
 #      Patch kernel => slab distortion
 #      /proc/[pid]/pagemap stuff
 #      Legend and canvas alongside
@@ -63,13 +63,16 @@ class Painter:
 
     def __init__(self,args):
         self.args = args
-        self.pagemap = pagemapdata.PagemapData()
+        try:
+            self.pagemap = pagemapdata.PagemapData()
+        except pagemapdata.NoPagemapError:
+            sys.exit("No access to pagemap interface.Exit.")
         self.pgcnt = self.pagemap.get_pagecount()
         self.scr_w = 1024
         self.scr_h = (self.pgcnt+1023)/self.scr_w
         self.count_int = 30;
         self.count_base = 80;
-        print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
+        # print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
         if self.args.count:
             self.p_type = COUNT
         elif self.args.flags:
@@ -222,15 +225,14 @@ class Legend:
         # define coords of legend
         self.grid = {}
         self.box_l = 20
-        if self.l_type == FLAGS:
-            x = 20
-            y = 30
-            self.grid["BUDDY"] = (x,y*1,"#000000")
-            self.grid["SLAB"] = (x,y*2,"#FFFFFF")
-            self.grid["LOCKED"] = (x,y*3,"#00FF00")
-            self.grid["DIRTY"] = (x,y*4,"#FF0000")
-            self.grid["LRU"] = (x,y*5,"#0000F0")
-            self.grid["LRU_ACTIVE"] = (x,y*6,"#0000FF")
+        x = 20
+        y = 30
+        self.grid["BUDDY"] = (x,y*1,"#000000")
+        self.grid["SLAB"] = (x,y*2,"#FFFFFF")
+        self.grid["LOCKED"] = (x,y*3,"#00FF00")
+        self.grid["DIRTY"] = (x,y*4,"#FF0000")
+        self.grid["LRU"] = (x,y*5,"#0000F0")
+        self.grid["LRU_ACTIVE"] = (x,y*6,"#0000FF")
 
     def draw_body(self):
         self.frame_page.set_label('Current page address')

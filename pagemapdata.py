@@ -3,6 +3,31 @@
 import os
 import struct
 
+class Error(Exception):
+    '''
+    Base exception for this module
+    '''
+    pass
+
+class NoPagemapError(Error):
+    '''
+    That exception is raised, when no pagemap interface is presented in
+    current kernel or user of module has not sufficient rights (no-root)
+    '''
+    pass
+
+class NoKpagecountAccess(Error):
+    '''
+    Executions which is raised on open(/kpagecount) error
+    '''
+    pass
+
+class NoKpageflagsAccess(Error):
+    '''
+    Executions which is raised on open(/kpagecount) error
+    '''
+    pass
+
 class PagemapData:
     '''
     Class which encapsulate libpagemap operations
@@ -12,6 +37,11 @@ class PagemapData:
         self.kpageflags = '\0'
         self.kpagemap = {}
         self.pagecount = 0
+        try:
+            open("/proc/kpagecount","r",0)
+            open("/proc/kpageflags","r",0)
+        except:
+            raise NoPagemapError()
 
     def refresh_procs(self):
         pass
