@@ -70,7 +70,7 @@ class PagemapData:
         Map /proc/kpagecount to memory
         '''
         try:
-            self.kpagecount = open("/proc/kpagecount","r",0).read(8*self.pagecount)
+            self.kpagecount = open("/proc/kpagecount","rb",0).read(8*self.pagecount)
         except:
             self.kpagecount = '\0'*self.pagecount
 
@@ -79,7 +79,7 @@ class PagemapData:
         Map /proc/kpageflags to memory
         '''
         try:
-            self.kpageflags = open("/proc/kpageflags","r",0).read(8*self.pagecount)
+            self.kpageflags = open("/proc/kpageflags","rb",0).read(8*self.pagecount)
         except:
             self.kpageflags = '\0'*self.pagecount
 
@@ -87,14 +87,16 @@ class PagemapData:
         '''
         Return 8-byte tuple for selected page -- may be bottleneck?
         '''
-        cnt = self.kpagecount[page*8:page*8+8]
+        pos = page*8
+        cnt = self.kpagecount[pos:pos+8]
         return struct.unpack("Q", cnt)[0]
 
     def get_flags(self,page):
         '''
         Return 8-byte tuple for selected page -- may be bottleneck?
         '''
-        cnt = self.kpageflags[page*8:page*8+8]
+        pos = page*8
+        cnt = self.kpageflags[pos:pos+8]
         return struct.unpack("Q", cnt)[0]
         
     def refresh_data(self):
