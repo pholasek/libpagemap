@@ -29,32 +29,25 @@ import threading
 import gobject
 import argparse
 import pagemapdata
-import pango
+import matplotlib
+from pylab import *
 
-#TODO: Threads? :D
+#TODO: 
 #      Speed-up pagemapdata.py module and do some refresh stuff
+#            Threads on backgroud? 
 #      Patch kernel => slab distortion
 #      /proc/[pid]/pagemap stuff
 #      Legend and canvas alongside
-#      Zoom :D
+#      Zoom - is it usable? 
 
 COUNT = 1
 FLAGS = 2
 PGMAP = 3
 
-class CountThread(threading.Thread):
-    def __init__(self, painter):
-        self.painter = painter
-        threading.Thread.__init__(self)
-    def run (self):
-        while True:
-            p.refresh_kcount()
-            p.kpgcnt_pixbuff()
-
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--count', action='store_true', help='show image of kpagecount')
 parser.add_argument('-f', '--flags', action='store_true', help='show image of kpageflags')
-parser.add_argument('-i', type=int, help='refresh interval in seconds', default=-1)
+parser.add_argument('-p', '--pagemap', action='store_true', help='show image of pagemap files')
 
 
 class Painter:
@@ -68,470 +61,38 @@ class Painter:
             self.pagemap = pagemapdata.PagemapData()
         except pagemapdata.NoPagemapError:
             sys.exit("No access to pagemap interface.Exit.")
-        self.pgcnt = self.pagemap.get_pagecount()
-        self.scr_w = 1024
-        self.scr_h = (self.pgcnt+1023)/self.scr_w
-        self.count_int = 30;
-        self.count_base = 80;
-        self.timer = None;
-        # print "count: ",self.pgcnt, self.scr_w, "x3x" ,self.scr_h," = ", 3*self.scr_w*self.scr_h
-        if self.args.count:
+        if args.count:
             self.p_type = COUNT
-        elif self.args.flags:
+        elif args.flags:
             self.p_type = FLAGS
+        elif args.pagemap:
+            self.p_type = PGMAP
         else:
-            self.p_type = COUNT
-        if self.args.i > -1:
-            self.ref_time = self.args.i*1000
-        else:
-            self.ref_time = self.args.i
-        #self.refresh_timer()
-
-    def paint(self):
-        if True:
-            if self.p_type == COUNT:
-                self.refresh_kcount()
-                self.kpgcnt_pixbuff()
-            elif self.p_type == FLAGS:
-                self.refresh_kflags()
-                self.kpgflg_pixbuff()
-
-    def change_type(self, new_type):
-        '''
-        Change between types of visualization
-        '''
-        self.p_type = new_type;
-        gobject.source_remove(self.timer)
-        self.refresh_timer()
-
-    def draw_it(self):
-        canvas.draw_pixbuff()
-
-    def refresh_kcount(self):
-        self.pagemap.fill_count()
-
-    def refresh_kflags(self):
-        self.pagemap.fill_flags()
-
-    def kpgcnt_pixbuff(self):
-        '''
-        Fills pixbuff by correct colours of counts
-        '''
-        for i in range(self.pgcnt):
-            cnt = self.pagemap.get_count(i)
-            if cnt > 0:
-                canvas.set_RGB4page(i,min(255, cnt * self.count_int + self.count_base))
-            else:
-                canvas.set_RGB4page(i,0)
-
-        self.draw_it()
-
-    def kpgflg_pixbuff(self):
-        '''
-        Fills pixbuff by correct colours of flags
-        '''
-        for i in range(self.pgcnt):
-            flags = self.pagemap.get_flags(i)
-            if flags & (1L << 10): # BUDDY
-                canvas.set_RGB4page(i,0,0,0)
-                continue
-
-            if flags & (1L << 7): # SLAB
-                canvas.set_RGB4page(i,255,255,255)
-                continue
-
-            if flags & 1:
-                canvas.set_RGB4page(i,-1,255,-1) # LOCKED
-            else:
-                canvas.set_RGB4page(i,-1,0,-1)
-
-            if flags & (1L << 4): # DIRTY
-                canvas.set_RGB4page(i,255,-1,-1)
-            else:
-                canvas.set_RGB4page(i,0,-1,-1)
-
-            if flags & (1L << 5): # LRU
-                canvas.set_RGB4page(i,-1,-1,128)
-            elif flags & (1L << 6): # ACTIVE
-                canvas.set_RGB4page(i,-1,-1,255)
-            else:
-                canvas.set_RGB4page(i,-1,-1,0)
-
-        self.draw_it()
-
-    def refresh_timer(self):
-        '''
-        Main drawing method called at the start of application or by GUI
-        '''
-        self.paint()
-        if self.ref_time > -1:
-            self.timer = gobject.timeout_add(self.ref_time, self.refresh_timer)
-
-    def set_timer(self,new_time):
-        '''
-        GUI callback
-        '''
-        self.ref_time = new_time
-        if self.ref_time > -1:
-            gobject.timeout_add(self.ref_time, self.refresh_timer)
-        else:
-            if self.timer:
-                gobject.source_remove(self.timer)
-
-    def main(self):
-        gtk.main()
-        return 0
-
-class Legend:
-    '''
-    Window with briefing of colours of pagemap visualization
-    '''
-    def __init__(self, width, height, ltype):
-        self.width = width
-        self.height = height
-        self.rect_h = 30
-        self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        self.window.set_default_size(self.width, self.height)
-        self.window.set_resizable(0)
-        self.window.set_title('Pagemapvisual - legend')
-        self.window.connect('destroy', lambda p: gtk.main_quit())
-        self.window.set_border_width(5)
-        if ltype.count:
-            self.l_type = COUNT
-        elif ltype.flags:
-            self.l_type = FLAGS
-        else:
-            self.l_type = COUNT
-
-        main_box = gtk.VBox(False, 1)
-        self.window.add(main_box)
-
-        mb = gtk.MenuBar()
-        filemenu = gtk.Menu()
-        helpmenu = gtk.Menu()
-        filem = gtk.MenuItem("File")
-        helpm = gtk.MenuItem("Help")
-        filem.set_submenu(filemenu)
-        helpm.set_submenu(helpmenu)
-
-        sh_cnt = gtk.MenuItem("Show count")
-        sh_cnt.connect("activate", lambda a : self.set_legend(COUNT))
-        filemenu.append(sh_cnt)
-        sh_flg = gtk.MenuItem("Show flags")
-        sh_flg.connect("activate", lambda b : self.set_legend(FLAGS))
-        filemenu.append(sh_flg)
-        refresh = gtk.CheckMenuItem("Refresh")
-        if p.ref_time > -1:
-            refresh.set_active(True)
-        else:
-            refresh.set_active(False)
-        refresh.connect("activate", self.ref_change)
-        filemenu.append(refresh)
-
-        exit = gtk.MenuItem("Exit")
-        exit.connect("activate", gtk.main_quit)
-        filemenu.append(exit)
-        mb.append(filem)
-        about = gtk.MenuItem("About")
-        about.connect("activate", self.show_about)
-        helpmenu.append(about)
-        mb.append(helpm)
-        
-        main_box.pack_start(mb,False,False,0)
-
-        self.frame_page = gtk.Frame('')
-        self.label_page = gtk.Label('')
-        self.frame_page.add(self.label_page)
-        main_box.pack_start(self.frame_page,False,False,0)
-        self.frame_data = gtk.Frame('')
-        self.label_data = gtk.Label('')
-        self.frame_data.add(self.label_data)
-        main_box.pack_start(self.frame_data,False,False,0)
-        self.area = gtk.DrawingArea()
-        self.area.set_size_request(100,(int(255-p.count_base)/p.count_int+2)*self.rect_h) 
-        self.area.set_events(gtk.gdk.POINTER_MOTION_MASK |
-                             gtk.gdk.POINTER_MOTION_HINT_MASK )
-        self.area.connect("expose-event", self.area_redraw)
-        self.frame_legend = gtk.Frame('Page info')
-        self.frame_legend.add(self.area)
-        main_box.pack_start(self.frame_legend,False,False,0)
-
-        self.window.show_all()
-
-        self.gc = self.area.style.fg_gc[gtk.STATE_NORMAL]
-
-        # define coords of legend
-        self.grid = {}
-        self.box_l = 20
-        x = 20
-        y = 30
-        self.grid["BUDDY"] = (x,y*1,"#000000")
-        self.grid["SLAB"] = (x,y*2,"#FFFFFF")
-        self.grid["LOCKED"] = (x,y*3,"#00FF00")
-        self.grid["DIRTY"] = (x,y*4,"#FF0000")
-        self.grid["LRU"] = (x,y*5,"#0000F0")
-        self.grid["LRU_ACTIVE"] = (x,y*6,"#0000FF")
-
-    def draw_body(self):
-        self.frame_page.set_label('Current page address')
-        self.label_page.set_text('0xdeadbeef')
-        if self.l_type == COUNT:
-            self.frame_data.set_label('Current page count')
-        elif self.l_type == FLAGS:
-            self.frame_data.set_label('Current page flags')
-        else:
-            self.frame_data.set_label('')
-        self.label_data.set_text('0xdeadbeef')
-        self.area.window.draw_rectangle(self.gc,True,0,0,self.area.size_request()[0], self.area.size_request()[1]) #fix
-        self.draw_info();
-
-    def set_legend(self, ltype):
-        '''
-        Visualisation type change callback
-        '''
-        self.l_type = ltype
-        self.draw_body()
-        p.change_type(ltype)
-
-    def respDialog(self, entry, dialog, response):
-     	    dialog.response(response)
-
-    def get_number_dialog(self):
-            dialog = gtk.MessageDialog(None,
-	        gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
-	        gtk.MESSAGE_QUESTION,
-	        gtk.BUTTONS_OK,
-	        None)
-            dialog.set_markup('Please enter refresh interval in <b>seconds</b>:')
-            # spinButton conf
-            spin = gtk.SpinButton(gtk.Adjustment(0,0,999,1,0,0))
-            spin.connect("activate", self.respDialog, dialog, gtk.RESPONSE_OK)
-            dialog.vbox.pack_end(spin, True, True, 0)
-            dialog.show_all()
-            dialog.run()
-            number = spin.get_value_as_int()
-            dialog.destroy()
-            return number
-
-    def ref_change(self,action):
-        '''
-        Refresh button callback
-        '''
-        if action.get_active():
-            p.set_timer(1000*self.get_number_dialog())
-        else:
-            p.set_timer(-1)
-
-    def draw_info(self):
-        if self.l_type == COUNT:
-            self.g_legend = self.g_count()
-        elif self.l_type == FLAGS:
-            self.g_legend = self.g_flags()
-        else:
-            self.g_legend = None
-
-    def set_data(self, page):
-        self.label_page.set_text("0x%016x" % (page*4096))
-        if self.l_type == COUNT:
-            self.label_data.set_text("%d" % p.pagemap.get_count(page))
-        elif self.l_type == FLAGS:
-            self.g_flags_rect()
-            gc = self.area.window.new_gc()
-            f = p.pagemap.get_flags(page)
-            self.label_data.set_text(bin(f)[2:].zfill(36))
-            gc.set_rgb_fg_color(gtk.gdk.color_parse('yellow'))
-            if f & (1L << 10): # BUDDY
-                x,y,color = self.grid["BUDDY"]
-                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
-                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
-
-            if f & (1L << 7): # SLAB
-                x,y,color = self.grid["SLAB"]
-                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
-                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
-
-            if f & 1: # LOCKED
-                x,y,color = self.grid["LOCKED"]
-                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
-                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
-
-            if f & (1L << 4): # DIRTY
-                x,y,color = self.grid["DIRTY"]
-                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
-                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
-
-            if f & (1L << 5): # LRU
-                x,y,color = self.grid["LRU"]
-                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
-                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
-
-            if f & (1L << 6): # ACTIVE
-                x,y,color = self.grid["LRU_ACTIVE"]
-                self.area.window.draw_line(gc,x,y,x+self.box_l,y+self.box_l)
-                self.area.window.draw_line(gc,x,y+self.box_l,x+self.box_l,y)
-
-    def g_count(self):
-        gc = self.area.window.new_gc()
-        base = p.count_base
-        interval = p.count_int
-        corner = 0
-        i = 1
-        color = base + interval*i;
-        font_desc = pango.FontDescription('courier bold 12')
-        layout = self.area.create_pango_layout('0')
-        layout.set_font_description(font_desc)
-        # draw a legend!
-        gc.set_rgb_fg_color(gtk.gdk.color_parse('#000000'))
-        self.area.window.draw_rectangle(gc, True,0,corner,self.width/2,self.rect_h)
-        self.area.window.draw_layout(gc, self.width*3/4, corner+self.rect_h/2, layout)
-        corner += self.rect_h
-
-        while color < 255:
-            gc.set_rgb_fg_color(gtk.gdk.color_parse('#%X0000' % color))
-            self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,self.rect_h)
-            layout.set_text(str(i))
-            self.area.window.draw_layout(gc, self.width*3/4, corner+self.rect_h/2, layout)
-            corner += self.rect_h
-            i += 1
-            color = base + i*interval
-
-        # more than anything 
-        gc.set_rgb_fg_color(gtk.gdk.color_parse('#FF0000'))
-        self.area.window.draw_rectangle(gc, True, 0,corner,self.width/2,self.rect_h)
-        layout.set_text('more')
-        self.area.window.draw_layout(gc, self.width*3/4, corner+self.rect_h/2, layout)
-
-    def g_flags(self):
-        gc = self.area.window.new_gc()
-        font_desc = pango.FontDescription('courier bold 12')
-        layout = self.area.create_pango_layout('')
-        layout.set_font_description(font_desc)
-
-        for k in self.grid.keys():
-            x,y,color = self.grid[k]
-            gc.set_rgb_fg_color(gtk.gdk.color_parse(color)) 
-            self.area.window.draw_rectangle(gc, True, x, y, self.box_l, self.box_l)
-            layout.set_text(k)
-            self.area.window.draw_layout(gc, x + self.box_l + 15, y, layout)
-
-    def g_flags_rect(self):
-        gc = self.area.window.new_gc()
-        for k in self.grid.keys():
-            x,y,color = self.grid[k]
-            gc.set_rgb_fg_color(gtk.gdk.color_parse(color)) 
-            self.area.window.draw_rectangle(gc, True, x, y, self.box_l, self.box_l)
-
-    def area_redraw(self, area, event):
-        '''
-        expose-event handler
-        '''
-        self.draw_info()
-        return True
-
-    def show_about(self, event):
-        about = gtk.AboutDialog()
-        about.set_program_name("pagemapvisual")
-        about.set_version("0.1")
-        about.set_copyright("Copyright (C) 2010 Red Hat Inc.")
-        about.set_website("https://fedorahosted.org/libpagemap/")
-        about.run()
-        about.destroy()
-
-class MemoryCanvas: 
-    '''
-    Graphical part of application
-    '''
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-        # WHY ?
-        self.pixbuff = array.array('B', '\0'*(3*self.width*(self.height+32)))
-        window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        window.set_title("Pagemapvisual")
-        window.connect("destroy", lambda w: gtk.main_quit())
-        window.set_default_size(self.width, self.height)
-        self.area = gtk.DrawingArea()
-        self.area.set_size_request(self.width, self.height) 
-        self.area.set_events(gtk.gdk.POINTER_MOTION_MASK |
-                             gtk.gdk.POINTER_MOTION_HINT_MASK )
-        self.area.connect("expose-event", self.area_redraw)
-        self.area.connect("motion-notify-event", self.motion_event)
-        self.sw = gtk.ScrolledWindow()
-        self.sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-        window.add(self.sw)
-        self.sw.add_with_viewport(self.area)
-
-        self.sw.show()
-        self.area.show()
-        window.show()
-        self.style = self.area.get_style()
-        self.gc = self.style.fg_gc[gtk.STATE_NORMAL]
-
-    def motion_event(self, area, event):
-        '''
-        Callback for mouse-moves over widget
-        '''
-        x,y = area.get_pointer()
-        page = self.pixel2page(x,y)
-        legend.set_data(page)
-
-    def page2pixel(self,page):
-        '''
-        Place page into block of 1024 pages (usually 4MB)
-        '''
-        block_seq = int(page) / 1024
-        x = block_seq % 32 * 32 + (page % 1024) % 32
-        y = block_seq / 32 * 32 + (page % 1024) / 32
-        return x, y
-
-    def pixel2page(self, x, y):
-        '''
-        Computes pixels of page on pixel
-        '''
-        #Stolen code O_o
-        block = ((y >> 5) << 5) + (x >> 5)
-        return (block << 10) + ((y & 31) << 5) + (x & 31)
-
-    def set_RGB4page(self, page, red, green=0, blue=0):
-        x, y = self.page2pixel(page)
-        pos = y * 1024 + x
-
-        try:
-            if red != -1:
-                self.pixbuff[pos*3] = red
-            if green != -1:
-                self.pixbuff[pos*3 + 1] = green
-            if blue != -1:
-                self.pixbuff[pos*3 + 2] = blue
-        except:
-            print "ERR:",pos*3
-
-    def erase_pixbuff(self):
-        self.pixbuff = array.array('B', '\0'*(3*self.width*(self.height+32)))
-
-    def draw_pixbuff(self):
-        '''
-        Buffer is passed as string
-        '''
-        self.area.window.draw_rgb_image(self.gc, 0, 0, self.width, self.height,
-                gtk.gdk.RGB_DITHER_NONE, self.pixbuff.tostring(), self.width*3)
-
-    def area_redraw(self, area, event):
-        '''
-        expose-event handler
-        '''
-        self.draw_pixbuff()
-        return True
+            self.p_type = -1
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     p = Painter(args)
-    canvas = MemoryCanvas(p.scr_w, p.scr_h)
-    legend = Legend(150,350,args)
-    legend.draw_body()
-    p.refresh_timer()
-    gtk.main()
+    p.pagemap.refresh_pids()
+    p.pagemap.refresh_pgmap()
+
+    # make a square figure and axes
+    figure(1, figsize=(6,6))
+    ax = axes([0.1, 0.1, 0.8, 0.8])
+
+    fracs = []
+    labels = []
+
+    for k in sorted(p.pagemap.kpagemap.keys()):
+        labels.append(k)
+        fracs.append(p.pagemap.kpagemap[k][1])
+
+    pie(fracs, labels=labels, autopct='%1.1f%%', shadow=True)
+    title('PSS per pids', bbox={'facecolor':'0.8', 'pad':5})
+
+    show()
+
     
 
     
