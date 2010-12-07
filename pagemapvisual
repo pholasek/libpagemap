@@ -31,23 +31,49 @@ import argparse
 import pagemapdata
 import matplotlib
 from pylab import *
+import numpy.numarray as na
 
 #TODO: 
 #      Speed-up pagemapdata.py module and do some refresh stuff
 #            Threads on backgroud? 
 #      Patch kernel => slab distortion
 #      /proc/[pid]/pagemap stuff
-#      Legend and canvas alongside
-#      Zoom - is it usable? 
+# Type of graphs:
+#   count * pie chart - percentage of shared pages (0-6%,1-80%..)
+#         * bar chart - percentage of shared pages (0-6%,1-80%..)
+#   flags * bar chart - percentage of used flags (buddy-6%,slab-80%..) NOT IMPLEMENT
+#   pagemap * pie chart(s) - percentage by processes by every statistics (USS,PSS,SWAP,SHARE,RES)
+
+
 
 COUNT = 1
 FLAGS = 2
 PGMAP = 3
 
+BAR   = 4
+PIE   = 5
+
+PID   = 6
+NAME  = 7
+
+USS   = 8
+PSS   = 9
+SWAP  = 10
+RES   = 11
+SHR   = 12
+
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--count', action='store_true', help='show image of kpagecount')
-parser.add_argument('-f', '--flags', action='store_true', help='show image of kpageflags')
-parser.add_argument('-p', '--pagemap', action='store_true', help='show image of pagemap files')
+parser.add_argument('source', choices=['pagecount','pageflags','pagemap'],help='source of data')
+parser.add_argument('type', choices=['bar','pie'], help='type of chart')
+parser.add_argument('--stat', nargs='?', const='uss', default='uss', help='type of statistics to plot [uss|pss|shr|swap|res] uss is default')
+parser.add_argument('--label', nargs='?', const='name', default='name', help='type of label on pagemap statistics [name|pid]')
+
+
+class RuntimeError(Exception):
+    '''
+    Base error class
+    '''
+    pass
 
 
 class Painter:
@@ -61,37 +87,159 @@ class Painter:
             self.pagemap = pagemapdata.PagemapData()
         except pagemapdata.NoPagemapError:
             sys.exit("No access to pagemap interface.Exit.")
-        if args.count:
-            self.p_type = COUNT
-        elif args.flags:
-            self.p_type = FLAGS
-        elif args.pagemap:
-            self.p_type = PGMAP
+        if args.source == 'pagecount':
+            self.s_src = COUNT
+            self.texttitle = 'Number of page shares'
+        elif args.source == 'pageflags':
+            self.s_src = FLAGS
+            self.texttitle = 'Page flags'
+        elif args.source == 'pagemap':
+            self.s_src = PGMAP
         else:
-            self.p_type = -1
+            self.s_type = -1 # should never happen
+
+        if args.type == 'bar':
+            self.s_type = BAR
+        elif args.type == 'pie':
+            self.s_type = PIE
+        else:
+            self.s_type = -1 # should never happen
+
+        if args.label == 'name':
+            self.l_type = NAME
+        elif args.label == 'pid':
+            self.l_type = PID
+        else:
+            self.s_type = NAME # should never happen
+
+        if self.s_src == PGMAP:
+            if args.stat == 'uss':
+                self.p_type = USS
+                self.texttitle = 'Non-zero USS of system processes'
+            elif args.stat == 'pss':
+                self.p_type = PSS
+                self.texttitle = 'Non-zero PSS of system processes'
+            elif args.stat == 'shr':
+                self.p_type = SHR
+                self.texttitle = 'Non-zero SHR of system processes'
+            elif args.stat == 'swap':
+                self.p_type = SWAP
+                self.texttitle = 'Non-zero SWAP of system processes'
+            elif args.stat == 'res':
+                self.p_type = RES
+                self.texttitle = 'Non-zero RES of system processes'
+            else:
+                self.p_type = USS # should never happen
+                self.texttitle = 'Non-zero USS of system processes'
+
+            self.texttitle = ''.join([self.texttitle,' in kB'])
+
+        self.source_switch = {
+                               COUNT : self.prepare_count,
+                               FLAGS : self.prepare_flags,
+                               PGMAP : self.prepare_pagemap
+                             }
+        self.type_switch = {
+                             BAR : self.draw_bar,
+                             PIE : self.draw_pie
+                           }
+
+        self.p_data = {}
+
+    def prepare_count(self):
+        '''
+        Make dictionary from kpgacount values
+        '''
+        self.p_data = {}
+        pgcount = p.pagemap.get_pagecount()
+        p.pagemap.fill_count()
+        for i in range(pgcount):
+            c = p.pagemap.get_count(i)
+            if c < 100:
+                if not c in self.p_data:
+                    self.p_data[c] = 1
+                else:
+                    self.p_data[c] += 1
+
+
+    def prepare_flags(self):
+        self.p_data = {}
+
+    def prepare_pagemap(self):
+        self.p_data = {}
+        p.pagemap.refresh_pids()
+        p.pagemap.refresh_pgmap()
+        # fill self.p_data due requested value
+        for k, v in p.pagemap.kpagemap.items():
+            if self.l_type == NAME:
+                label_key = v[5]
+            elif self.l_type == PID:
+                label_key = k
+
+            #uss
+            if self.p_type == USS:
+                if v[0]:
+                    self.p_data[label_key] = v[0]
+            elif self.p_type == PSS:
+                if v[1]:
+                    self.p_data[label_key] = v[1]
+            elif self.p_type == SHR:
+                if v[2]:
+                    self.p_data[label_key] = v[2]
+            elif self.p_type == RES:
+                if v[3]:
+                    self.p_data[label_key] = v[3]
+            elif self.p_type == SWAP:
+                if v[4]:
+                    self.p_data[label_key] = v[4]
+
+         
+    def draw_bar(self):
+        '''
+        Plots bar graph
+        '''
+        width = 0.2
+        #figure(1, figsize=(6,6))
+        #ax = axes([0.1, 0.1, 0.8, 0.8])
+        xlocations = na.array(range(len(self.p_data.keys())))
+        xlocations_t = na.array(range(1,len(self.p_data.keys())+1))
+
+        bar(xlocations, self.p_data.values())
+        title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
+        if self.s_src == PGMAP:
+            xticks(xlocations_t, self.p_data.keys(),rotation='vertical') # for big charts
+        else:
+            xticks(xlocations, self.p_data.keys()) # for big charts
+        show()
+ 
+    def draw_pie(self):
+        '''
+        Plots pie graph
+        '''
+        figure(1, figsize=(6,6))
+        ax = axes([0.1, 0.1, 0.8, 0.8])
+        pie(self.p_data.values(),labels=self.p_data.keys(), shadow=False)
+        
+        title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
+
+        show()
+
+    def run_plot(self):
+        '''
+        Core method which starts data prepare and plot
+        '''
+        print 'Preparing data . . .'
+        self.source_switch.get(self.s_src, 1)()
+        print 'Ploting data . . .'
+        self.type_switch.get(self.s_type, 1)()
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     p = Painter(args)
-    p.pagemap.refresh_pids()
-    p.pagemap.refresh_pgmap()
+    p.run_plot()
 
-    # make a square figure and axes
-    figure(1, figsize=(6,6))
-    ax = axes([0.1, 0.1, 0.8, 0.8])
 
-    fracs = []
-    labels = []
-
-    for k in sorted(p.pagemap.kpagemap.keys()):
-        labels.append(k)
-        fracs.append(p.pagemap.kpagemap[k][1])
-
-    pie(fracs, labels=labels, autopct='%1.1f%%', shadow=True)
-    title('PSS per pids', bbox={'facecolor':'0.8', 'pad':5})
-
-    show()
 
     
 

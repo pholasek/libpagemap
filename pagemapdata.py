@@ -40,7 +40,13 @@ class NoPagemapAccess(Error):
     Exception raised on /proc/[pid]/pagemap open error
     '''
     pass
-    
+
+class NoStatusAccess(Error):
+    '''
+    Exception raised on /proc/[pid]/status open error
+    '''
+    pass
+
 
 class PagemapData:
     '''
@@ -84,8 +90,8 @@ class PagemapData:
                 self.kpagemap[p] = self.count_stats(p)
             except:
                 print 'pagemap error for pid %s' % p
-        for k in sorted(self.kpagemap.iterkeys()):
-            print '%s = uss %d pss %d share %d res %d swap %d' % (k, self.kpagemap[k][0], self.kpagemap[k][1],self.kpagemap[k][2],self.kpagemap[k][3],self.kpagemap[k][4])
+        #for k in sorted(self.kpagemap.iterkeys()):
+        #    print '%s = uss %d pss %d share %d res %d swap %d' % (k, self.kpagemap[k][0], self.kpagemap[k][1],self.kpagemap[k][2],self.kpagemap[k][3],self.kpagemap[k][4])
 
 
     def read_maps(self, pid):
@@ -114,6 +120,7 @@ class PagemapData:
         share = 0
         res = 0
         swap = 0
+        cmd = ''
 
         try:
             maps = self.read_maps(pid)
@@ -146,7 +153,19 @@ class PagemapData:
                 curr_addr += self.pagesize
 
         p_file.close()
-        return uss,pss,share,res,swap
+        
+        # Name of process examination
+        name = ''.join(['/proc/',str(pid),'/status'])
+        try:
+            p_file = open(name,"r", 0)
+        except: 
+            raise NoStatusAccess(name)
+
+        cmd = p_file.readline()[6:]
+        
+        p_file.close()
+
+        return uss,pss,share,res,swap,cmd
 
     def process_pfn(self, number):
         '''
