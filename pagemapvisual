@@ -65,8 +65,10 @@ SHR   = 12
 parser = argparse.ArgumentParser()
 parser.add_argument('source', choices=['pagecount','pageflags','pagemap'],help='source of data')
 parser.add_argument('type', choices=['bar','pie'], help='type of chart')
-parser.add_argument('--stat', nargs='?', const='uss', default='uss', help='type of statistics to plot [uss|pss|shr|swap|res] uss is default')
-parser.add_argument('--label', nargs='?', const='name', default='name', help='type of label on pagemap statistics [name|pid]')
+parser.add_argument('--stat', nargs='?', const='uss', default='uss', help='type of statistics to plot STAT=[uss|pss|shr|swap|res] uss is default')
+parser.add_argument('--label', nargs='?', const='name', default='name', help='type of label on pagemap statistics LABEL=[name|pid]')
+parser.add_argument('--filtery', nargs='?', const='', default='', help='filter used for y-axis values FILTERY=[[from]:[to]]')
+parser.add_argument('--logy', action='store_true', help='enable log scale on y-axis')
 
 
 class RuntimeError(Exception):
@@ -98,6 +100,11 @@ class Painter:
         else:
             self.s_type = -1 # should never happen
 
+        if args.logy == True:
+            self.logar = True
+        else:
+            self.logar = False
+
         if args.type == 'bar':
             self.s_type = BAR
         elif args.type == 'pie':
@@ -115,22 +122,22 @@ class Painter:
         if self.s_src == PGMAP:
             if args.stat == 'uss':
                 self.p_type = USS
-                self.texttitle = 'Non-zero USS of system processes'
+                self.texttitle = 'USS of system processes'
             elif args.stat == 'pss':
                 self.p_type = PSS
-                self.texttitle = 'Non-zero PSS of system processes'
+                self.texttitle = 'PSS of system processes'
             elif args.stat == 'shr':
                 self.p_type = SHR
-                self.texttitle = 'Non-zero SHR of system processes'
+                self.texttitle = 'SHR of system processes'
             elif args.stat == 'swap':
                 self.p_type = SWAP
-                self.texttitle = 'Non-zero SWAP of system processes'
+                self.texttitle = 'SWAP of system processes'
             elif args.stat == 'res':
                 self.p_type = RES
-                self.texttitle = 'Non-zero RES of system processes'
+                self.texttitle = 'RES of system processes'
             else:
                 self.p_type = USS # should never happen
-                self.texttitle = 'Non-zero USS of system processes'
+                self.texttitle = 'USS of system processes'
 
             self.texttitle = ''.join([self.texttitle,' in kB'])
 
@@ -178,20 +185,15 @@ class Painter:
 
             #uss
             if self.p_type == USS:
-                if v[0]:
-                    self.p_data[label_key] = v[0]
+                self.p_data[label_key] = v[0]
             elif self.p_type == PSS:
-                if v[1]:
-                    self.p_data[label_key] = v[1]
+                self.p_data[label_key] = v[1]
             elif self.p_type == SHR:
-                if v[2]:
-                    self.p_data[label_key] = v[2]
+                self.p_data[label_key] = v[2]
             elif self.p_type == RES:
-                if v[3]:
-                    self.p_data[label_key] = v[3]
+                self.p_data[label_key] = v[3]
             elif self.p_type == SWAP:
-                if v[4]:
-                    self.p_data[label_key] = v[4]
+                self.p_data[label_key] = v[4]
 
          
     def draw_bar(self):
@@ -204,7 +206,7 @@ class Painter:
         xlocations = na.array(range(len(self.p_data.keys())))
         xlocations_t = na.array(range(1,len(self.p_data.keys())+1))
 
-        bar(xlocations, self.p_data.values())
+        bar(xlocations, self.p_data.values(), log=self.logar)
         title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
         if self.s_src == PGMAP:
             xticks(xlocations_t, self.p_data.keys(),rotation='vertical') # for big charts
@@ -218,11 +220,56 @@ class Painter:
         '''
         figure(1, figsize=(6,6))
         ax = axes([0.1, 0.1, 0.8, 0.8])
-        pie(self.p_data.values(),labels=self.p_data.keys(), shadow=False)
-        
+        chart = pie(self.p_data.values(),labels=self.p_data.keys(), shadow=False)
+
         title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
 
         show()
+
+    def filter_parse(self, filter_str):
+        '''
+        Method parses given filter values
+        '''
+        if filter_str != '':
+            values = filter_str.split(':')
+        else:
+            values = ''
+            minim, maxim =  None, None
+        if len(values) != 2:
+            minim, maxim =  None, None
+        else:
+            if values[0] == '':
+                minim = None
+            else:
+                try:
+                    minim = int(values[0])
+                except:
+                    minim = None
+            if values[1] == '':
+                maxim = None
+            else:
+                try:
+                    maxim = int(values[1])
+                except:
+                    maxim = None
+        if minim and maxim and minim > maxim:
+            return None, None
+        return minim, maxim
+
+    def filter_values(self):
+        '''
+        Method filters values to plot in order of given filter values
+        '''
+        minim_y, maxim_y = self.filter_parse(self.args.filtery)
+        for k in self.p_data.keys():
+            if minim_y:
+                if self.p_data[k] < minim_y:
+                    del self.p_data[k]
+                    continue
+            if maxim_y:
+                if self.p_data[k] > maxim_y:
+                    del self.p_data[k]
+        
 
     def run_plot(self):
         '''
@@ -230,6 +277,7 @@ class Painter:
         '''
         print 'Preparing data . . .'
         self.source_switch.get(self.s_src, 1)()
+        self.filter_values()
         print 'Ploting data . . .'
         self.type_switch.get(self.s_type, 1)()
 
