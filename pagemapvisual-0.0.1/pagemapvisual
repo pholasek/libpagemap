@@ -32,12 +32,15 @@ import pagemapdata
 import matplotlib
 from pylab import *
 import numpy.numarray as na
+from operator import itemgetter
 
-#TODO: 
+# TODO: 
+#      Wedges value label
+#      Patch kernel => slab distortion
+#      Status bar of processing?
+#      Show filter and limit settings
 #      Speed-up pagemapdata.py module and do some refresh stuff
 #            Threads on backgroud? 
-#      Patch kernel => slab distortion
-#      /proc/[pid]/pagemap stuff
 # Type of graphs:
 #   count * pie chart - percentage of shared pages (0-6%,1-80%..)
 #         * bar chart - percentage of shared pages (0-6%,1-80%..)
@@ -69,6 +72,7 @@ parser.add_argument('--stat', nargs='?', const='uss', default='uss', help='type 
 parser.add_argument('--label', nargs='?', const='name', default='name', help='type of label on pagemap statistics LABEL=[name|pid]')
 parser.add_argument('--filtery', nargs='?', const='', default='', help='filter used for y-axis values FILTERY=[[from]:[to]]')
 parser.add_argument('--logy', action='store_true', help='enable log scale on y-axis')
+parser.add_argument('--limity', nargs='?', const=0, type=int, default=0, help='eliminates results to first/last y-values LIMITY=[[+|-]NUMBER]')
 
 
 class RuntimeError(Exception):
@@ -119,6 +123,11 @@ class Painter:
         else:
             self.s_type = NAME # should never happen
 
+        if args.limity == '':
+            self.limit = 0
+        else:
+            self.limit = args.limity
+
         if self.s_src == PGMAP:
             if args.stat == 'uss':
                 self.p_type = USS
@@ -162,7 +171,7 @@ class Painter:
         p.pagemap.fill_count()
         for i in range(pgcount):
             c = p.pagemap.get_count(i)
-            if c < 100:
+            if c < 100: # hack against kpagecount 'bug'
                 if not c in self.p_data:
                     self.p_data[c] = 1
                 else:
@@ -220,7 +229,10 @@ class Painter:
         '''
         figure(1, figsize=(6,6))
         ax = axes([0.1, 0.1, 0.8, 0.8])
-        chart = pie(self.p_data.values(),labels=self.p_data.keys(), shadow=False)
+        labels=[]
+        for k, v in self.p_data.items():
+            labels.append('  '.join([str(k),str(v)]))
+        chart = pie(self.p_data.values(),labels=labels, shadow=False, autopct='')
 
         title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
 
@@ -269,7 +281,20 @@ class Painter:
             if maxim_y:
                 if self.p_data[k] > maxim_y:
                     del self.p_data[k]
-        
+
+    def limit_values(self):
+        '''
+        Eliminates number of results in graph to given limit
+        '''
+        if self.limit != 0:
+            out_of_limit = sorted(self.p_data.items(), key=itemgetter(1), reverse=True)
+            if self.limit > 0:
+                out_of_limit = out_of_limit[self.limit:]
+            else:
+                out_of_limit = out_of_limit[:self.limit]
+            for k,v in out_of_limit:
+                if k in self.p_data:
+                    del self.p_data[k]
 
     def run_plot(self):
         '''
@@ -278,6 +303,7 @@ class Painter:
         print 'Preparing data . . .'
         self.source_switch.get(self.s_src, 1)()
         self.filter_values()
+        self.limit_values()
         print 'Ploting data . . .'
         self.type_switch.get(self.s_type, 1)()
 
