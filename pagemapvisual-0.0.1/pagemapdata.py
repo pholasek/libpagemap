@@ -106,7 +106,8 @@ class PagemapData:
 
         for line in m_file:
             line = line.replace('-',' ')
-            areas.append((long(line.split()[0],16), long(line.split()[1],16)))
+            address = line.split(None,2)
+            areas.append((long(address[0],16), long(address[1],16)))
 
         m_file.close()
         return areas
@@ -133,24 +134,21 @@ class PagemapData:
             raise NoPagemapAccess(name)
 
         for area in maps:
-            curr_addr = area[0]
-            while curr_addr <= area[1]:
-                try:
-                    p_file.seek(curr_addr / self.pagesize * 8)
-                    data = p_file.read(8)
-                except:
-                    continue
-                if len(data):
-                    number = struct.unpack("Q", data)[0]
+            try:
+                p_file.seek(area[0] / self.pagesize * 8)
+                data = p_file.read((area[1]-area[0])/self.pagesize*8)
+            except:
+                continue
+            if len(data):
+                numbers = struct.unpack("Q"*(len(data)/8), data)
 
+                for number in numbers:
                     uss_n, pss_n, share_n, res_n, swap_n = self.process_pfn(number)
                     uss += uss_n*4
                     pss += float(pss_n)*4.0
                     share += share_n*4
                     res += res_n*4
                     swap += swap_n*4
-
-                curr_addr += self.pagesize
 
         p_file.close()
         
@@ -187,7 +185,14 @@ class PagemapData:
         # add pfn count
         pfn = number & ((1L << 55) - 1)
 
-        count = self.get_count(pfn)
+        # get page count
+        pos = pfn*8
+        try:
+            cnt = self.kpagecount[pos:pos+8]
+        except:
+            cnt = '\0'*8
+        count = struct.unpack("Q", cnt)[0]
+
         if count:
             if count == 1:
                 uss = 1

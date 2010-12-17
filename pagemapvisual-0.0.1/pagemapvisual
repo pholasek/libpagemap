@@ -18,16 +18,12 @@
 #
 # Author: Petr Holasek , pholasek@redhat.com
 
-import pygtk
-pygtk.require('2.0')
-import gtk
 import os
 import sys
 import array
 import time
-import threading
-import gobject
 import argparse
+import struct
 import pagemapdata
 import matplotlib
 from pylab import *
@@ -35,11 +31,13 @@ import numpy.numarray as na
 from operator import itemgetter
 
 # TODO: 
+#      Speed-up pagemapdata.py module and do some refresh stuff
+#      Pageflags stuff
+#      ------------ next release
 #      Wedges value label
-#      Patch kernel => slab distortion
+#      Show grid ?
 #      Status bar of processing?
 #      Show filter and limit settings
-#      Speed-up pagemapdata.py module and do some refresh stuff
 #            Threads on backgroud? 
 # Type of graphs:
 #   count * pie chart - percentage of shared pages (0-6%,1-80%..)
@@ -150,6 +148,13 @@ class Painter:
 
             self.texttitle = ''.join([self.texttitle,' in kB'])
 
+        if self.logar:
+            self.texttitle = ''.join([self.texttitle,' log axis: True '])
+        if self.limit != 0:
+            self.texttitle = ''.join([self.texttitle,' limit = ',str(self.limit)])
+        if self.args.filtery != '':
+            self.texttitle = ''.join([self.texttitle, ' filter = ', self.args.filtery])
+
         self.source_switch = {
                                COUNT : self.prepare_count,
                                FLAGS : self.prepare_flags,
@@ -170,12 +175,18 @@ class Painter:
         pgcount = p.pagemap.get_pagecount()
         p.pagemap.fill_count()
         for i in range(pgcount):
-            c = p.pagemap.get_count(i)
-            if c < 100: # hack against kpagecount 'bug'
-                if not c in self.p_data:
-                    self.p_data[c] = 1
-                else:
+            pos = i*8
+            try:
+                cnt = self.pagemap.kpagecount[pos:pos+8]
+            except:
+                cnt = '\0'*8
+            c = struct.unpack("Q", cnt)[0]
+
+            if c < 1000: # hack against kpagecount 'bug'
+                try:
                     self.p_data[c] += 1
+                except KeyError:
+                    self.p_data[c] = 1
 
 
     def prepare_flags(self):
@@ -231,7 +242,7 @@ class Painter:
         ax = axes([0.1, 0.1, 0.8, 0.8])
         labels=[]
         for k, v in self.p_data.items():
-            labels.append('  '.join([str(k),str(v)]))
+            labels.append(' '.join([str(k),str(v)]))
         chart = pie(self.p_data.values(),labels=labels, shadow=False, autopct='')
 
         title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
