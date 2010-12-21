@@ -31,7 +31,6 @@ import numpy.numarray as na
 from operator import itemgetter
 
 # TODO: 
-#      Speed-up pagemapdata.py module and do some refresh stuff
 #      Pageflags stuff
 #      ------------ next release
 #      Wedges value label
@@ -43,6 +42,7 @@ from operator import itemgetter
 #   count * pie chart - percentage of shared pages (0-6%,1-80%..)
 #         * bar chart - percentage of shared pages (0-6%,1-80%..)
 #   flags * bar chart - percentage of used flags (buddy-6%,slab-80%..) NOT IMPLEMENT
+#         * pie char  - percentage of memory with selected flag for processes NOT IMPLEMENT
 #   pagemap * pie chart(s) - percentage by processes by every statistics (USS,PSS,SWAP,SHARE,RES)
 
 
@@ -96,7 +96,7 @@ class Painter:
             self.texttitle = 'Number of page shares'
         elif args.source == 'pageflags':
             self.s_src = FLAGS
-            self.texttitle = 'Page flags'
+            self.texttitle = 'Number of pages with this flags'
         elif args.source == 'pagemap':
             self.s_src = PGMAP
         else:
@@ -149,11 +149,11 @@ class Painter:
             self.texttitle = ''.join([self.texttitle,' in kB'])
 
         if self.logar:
-            self.texttitle = ''.join([self.texttitle,' log axis: True '])
+            self.texttitle = ''.join([self.texttitle,',log axis: True '])
         if self.limit != 0:
-            self.texttitle = ''.join([self.texttitle,' limit = ',str(self.limit)])
+            self.texttitle = ''.join([self.texttitle,',limit = ',str(self.limit),' '])
         if self.args.filtery != '':
-            self.texttitle = ''.join([self.texttitle, ' filter = ', self.args.filtery])
+            self.texttitle = ''.join([self.texttitle, ',filter = ', self.args.filtery])
 
         self.source_switch = {
                                COUNT : self.prepare_count,
@@ -190,8 +190,94 @@ class Painter:
 
 
     def prepare_flags(self):
+        '''
+        Make dictionary for all types of values
+        '''
         self.p_data = {}
+        pcount = p.pagemap.get_pagecount()
+        p.pagemap.fill_flags()
+        # initialization of data dict
+        self.p_data["drt"] = 0
+        self.p_data["uptd"] = 0
+        self.p_data["wback"] = 0
+        self.p_data["err"] = 0
+        self.p_data["lck"] = 0
+        self.p_data["slab"] = 0
+        self.p_data["buddy"] = 0
+        self.p_data["cmpndh"] = 0
+        self.p_data["cmpndt"] = 0
+        self.p_data["ksm"] = 0
+        self.p_data["hwpois"] = 0
+        self.p_data["huge"] = 0
+        self.p_data["npage"] = 0
+        self.p_data["mmap"] = 0
+        self.p_data["anon"] = 0
+        self.p_data["swpche"] = 0
+        self.p_data["swpbck"] = 0
+        self.p_data["onlru"] = 0
+        self.p_data["actlru"] = 0
+        self.p_data["unevctb"] = 0
+        self.p_data["referenced"] = 0
+        self.p_data["recycle"] = 0
 
+        for i in range(pcount):
+            pos = i*8
+            try:
+                flg = self.pagemap.kpageflags[pos:pos+8]
+            except:
+                flg = '\0'*8
+            f = struct.unpack("Q", flg)[0]
+            # comparing values - same as in libpagemap
+            if f & 1L << 4:
+                self.p_data["drt"] += 1
+            if f & 1L << 3:
+                self.p_data["uptd"] += 1
+            if f & 1L << 8:
+                self.p_data["wback"] += 1
+            if f & 1L << 1:
+                self.p_data["err"] += 1
+            if f & 1L << 0:
+                self.p_data["lck"] += 1
+            if f & 1L << 7:
+                self.p_data["slab"] += 1
+            if f & 1L << 10:
+                self.p_data["buddy"] += 1
+            if f & 1L << 15:
+                self.p_data["cmpndh"] += 1
+            if f & 1L << 16:
+                self.p_data["cmpndt"] += 1
+            if f & 1L << 21:
+                self.p_data["ksm"] += 1
+            if f & 1L << 19:
+                self.p_data["hwpois"] += 1
+            if f & 1L << 16:
+                self.p_data["huge"] += 1
+            if f & 1L << 20:
+                self.p_data["npage"] += 1
+            if f & 1L << 11:
+                self.p_data["mmap"] += 1
+            if f & 1L << 12:
+                self.p_data["anon"] += 1
+            if f & 1L << 13:
+                self.p_data["swpche"] += 1
+            if f & 1L << 14:
+                self.p_data["swpbck"] += 1
+            if f & 1L << 5:
+                self.p_data["onlru"] += 1
+            if f & 1L << 6:
+                self.p_data["actlru"] += 1
+            if f & 1L << 18:
+                self.p_data["unevctb"] += 1
+            if f & 1L << 2:
+                self.p_data["referenced"] += 1
+            if f & 1L << 9:
+                self.p_data["recycle"] += 1
+
+        # clean zeros
+        for i in self.p_data.keys():
+            if self.p_data[i] == 0:
+                del self.p_data[i]
+        
     def prepare_pagemap(self):
         self.p_data = {}
         p.pagemap.refresh_pids()
@@ -228,10 +314,14 @@ class Painter:
 
         bar(xlocations, self.p_data.values(), log=self.logar)
         title(self.texttitle, bbox={'facecolor':'0.8', 'pad':5})
-        if self.s_src == PGMAP:
-            xticks(xlocations_t, self.p_data.keys(),rotation='vertical') # for big charts
+        captions = self.p_data.keys()
+        # pageflags are translated into more understoodable form
+        if FLAGS:
+            pass
+        if self.s_src == PGMAP or self.s_src == FLAGS:
+            xticks(xlocations_t, captions,rotation='vertical') # for big charts
         else:
-            xticks(xlocations, self.p_data.keys()) # for big charts
+            xticks(xlocations, captions) # for big charts
         show()
  
     def draw_pie(self):
