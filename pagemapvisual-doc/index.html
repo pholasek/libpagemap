@@ -1,0 +1,100 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+
+<title>
+    Pagemapvisual tool's howto page
+</title>
+
+<!-- Meta Tags -->
+<meta http-equiv="content-type" content="application/xhtml+xml; charset=utf-8" />
+<meta name="robots" content="index, follow" />
+
+
+<meta name="description" content="pagemapvisual howto page" />
+<meta name="keywords" content="libpagemap, pagemapvisual, howto, linux, fedora,
+                               memory, pagemap, kernel" />
+<meta name="author" content="Petr Holasek <pholasek@redhat.com>" />
+
+</head>
+
+<body>
+
+    <h1> Pagemapvisual </h1>
+
+    <h2> What is it? </h2>
+        Pagemapvisual is simple script written in Python enables system administrators (or another user
+        with root privileges) read kernel pagemap interface and show given data as charts using
+        <a href="http://matplotlib.sourceforge.net/">matplotlib</a>.
+
+    <h2> What is provided by pagemap interface? </h2>
+
+       <ul> 
+           <li>USS and PSS metrics</li>
+           <li>shared memory per process statistics</li>
+           <li>accurate swap count</li>
+           <li>accurate amount of resident memory </li>
+           <li>a lot of flags for every physical page in system
+           - further info Documentation/vm/pagemap.txt</li>
+       </ul>
+
+    <h2> Usage </h2>
+        <pre>
+        usage: pagemapvisual [-h] [--stat [STAT]] [--label [LABEL]]
+                             [--filtery [FILTERY]] [--logy] [--limity [LIMITY]]
+                             {pagecount,pageflags,pagemap} {bar,pie}
+
+        positional arguments:
+          {pagecount,pageflags,pagemap}
+                                source of data
+          {bar,pie}             type of chart
+
+        optional arguments:
+          -h, --help            show this help message and exit
+          --stat [STAT]         type of statistics to plot STAT=[uss|pss|shr|swap|res]
+                                uss is default
+          --label [LABEL]       type of label on pagemap statistics LABEL=[name|pid]
+          --filtery [FILTERY]   filter used for y-axis values FILTERY=[[from]:[to]]
+          --logy                enable log scale on y-axis
+          --limity [LIMITY]     eliminates results to first/last y-values
+                                LIMITY=[[+|-]NUMBER]
+        </pre>
+
+    <h2> Examples </h2>
+        Few examples of use:
+        <p>
+        <pre>pagemapvisual pagecount pie --filtery=1000: </pre>
+        <br>
+        <img src="images/pagecount_filtery_from_1000.png" width="70%"/>
+        </p>
+        <p>
+        <pre>pagemapvisual pagecount bar --filtery=50000: </pre>
+        <br>
+        <img src="images/pagecount_filtery_from_50000.png" width="70%"/>
+        </p>
+        <p>
+        <pre>pagemapvisual pagemap pie --filtery=:10000 --limity=10 </pre>
+        <br>
+        <img src="images/pagemap_limity_10_filtery_up_to_10000.png" width="70%"/>
+        </p>
+        <p>
+        <pre>pagemapvisual pagemap bar --filtery=:100000 --limity=10 --stat=swap</pre>
+        <br>
+        <img src="images/pagemap_limity_10_filtery_up_to_100k_stat_swap.png" width="70%"/>
+        </p>
+        <pre>pagemapvisual pagemap bar --limity=10 --stat=shr</pre>
+        <br>
+        <img src="images/pagemap_limity_10_stat_shr.png" width="70%"/>
+        </p>
+
+    <h3> Want to report bug or submit a patch? </h3>
+        <a href="mailto:pholasek@redhat.com">Petr Holasek</a><br>
+        <hr>
+        Copyright (C) 2010 Red Hat, Inc. All rights reserved.
+    
+</body>
+
+</html>
+

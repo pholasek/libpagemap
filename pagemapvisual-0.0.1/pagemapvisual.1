@@ -1,0 +1,38 @@
+.TH PAGEMAPVISUAL 1 "21 Dec 2010" "pagemapvisual" "User Commands"
+.SH NAME
+pagemapvisual \- Pagemapvisual is simple script written in Python enables system administrators 
+
+(or another user with root privileges) read kernel pagemap interface and show given data as charts using matplotlib. 
+.SH SYNOPSIS
+pagemapvisual {pagecount,pageflags,pagemap} {bar,pie} [--stat] [--label] [--filtery] [--logy] [--limity] [-h]
+
+.SH DESCRIPTION
+Pagemapvisual utility gets informations from /proc/kpagecount, /proc/kpageflags and /proc/[pid]/pagemap. 
+
+Using matplotlib library for plotting of outputs.
+.SH OPTIONS
+.TP
+.B \-h 
+for help
+.TP
+.B \-\-stat [STAT] 
+type of statistics to plot; STAT=[uss|pss|shr|swap|res]. Uss is default
+.TP
+.B \-\-label [LABEL] 
+type of label on pagemap statistics; LABEL=[name|pid]
+.TP
+.B \-\-filtery [FILTERY] 
+filter used for y-axis values; FILTERY=[[from]:[to]]
+.TP
+.B \-\-limity [LIMITY] 
+eliminates results to first/last y-values; LIMITY=[[+|-]NUMBER]
+.TP
+.B \-\-logy 
+enables logarithmic values on y-axis 
+
+.SH SEE ALSO
+\fBsmem\fP(8),\fBpgmap\fP(1)
+.SH BUGS
+\-
+.SH AUTHOR
+Petr Holasek <pholasek@redhat.com>
