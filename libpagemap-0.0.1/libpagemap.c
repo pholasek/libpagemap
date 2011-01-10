@@ -341,7 +341,7 @@ static void kill_mappings(pagemap_tbl * table) {
     }
 }
 
-static pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
+static inline pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
     if (!p_t)
         return NULL;
     if (BIT_SET(datanum,4))
@@ -393,7 +393,7 @@ static pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
     return p_t;
 }
 
-static int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
+static inline int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
 {
     char data[8];
     // kpageflags
@@ -407,7 +407,7 @@ static int get_kpageflags(pagemap_tbl * table, uint64_t page, uint64_t * target)
     return OK;
 }
 
-static int get_kpagecount(pagemap_tbl * table, uint64_t page, uint64_t * target)
+static inline int get_kpagecount(pagemap_tbl * table, uint64_t page, uint64_t * target)
 {
     char data[8];
     // kpagecount's
@@ -552,7 +552,7 @@ static int pgmap_ver(void) {
         return ERROR;
 }
 
-static int is_accessible(char * path)
+static inline int is_accessible(char * path)
 {
     if (access(path,R_OK) != 0) {
         return ERROR;
@@ -584,7 +584,7 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     return table;
 }
 
-static uint64_t ram_count(pagemap_tbl * table)
+static inline uint64_t ram_count(pagemap_tbl * table)
 {
     return table->kpagemap->phys_p_count;
 }
