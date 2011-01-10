@@ -162,11 +162,11 @@ class PagemapData:
 
                 for number in numbers:
                     uss_n, pss_n, share_n, res_n, swap_n = self.process_pfn(number)
-                    uss += uss_n*4
-                    pss += float(pss_n)*4.0
-                    share += share_n*4
-                    res += res_n*4
-                    swap += swap_n*4
+                    uss += uss_n*(self.pagesize >> 10)
+                    pss += float(pss_n)*(self.pagesize >> 10)
+                    share += share_n*(self.pagesize >> 10)
+                    res += res_n*(self.pagesize >> 10)
+                    swap += swap_n*(self.pagesize >> 10)
 
         p_file.close()
         
