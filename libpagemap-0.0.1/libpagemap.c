@@ -580,6 +580,7 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
             }
         }
     }
+    // Develop some manner to remove dead pids - some flag for refreshed pids
     closedir(proc_dir);
     return table;
 }
@@ -593,19 +594,22 @@ static inline uint64_t ram_count(pagemap_tbl * table)
 // external interface ////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 pagemap_tbl * init_pgmap_table(pagemap_tbl * table) {
-    if (pgmap_ver() == ERROR)
-        return NULL;
-    trace("pgmap_ver()");
-    table = malloc(sizeof(pagemap_tbl));
-    if (!table)
-        return NULL;
-    trace("allocating of table");
-    table->kpagemap = malloc(sizeof(kpagemap_t));
-    if (open_kpagemap(table->kpagemap) != OK) {
-        free(table);
-        return NULL;
+    // for new table - it is necessary to give NULL pointer at first call
+    if (!table) {
+        if (pgmap_ver() == ERROR)
+            return NULL;
+        trace("pgmap_ver()");
+        table = malloc(sizeof(pagemap_tbl));
+        if (!table)
+            return NULL;
+        trace("allocating of table");
+        table->kpagemap = malloc(sizeof(kpagemap_t));
+        if (open_kpagemap(table->kpagemap) != OK) {
+            free(table);
+            return NULL;
+        }
+        trace("open_kpagemap");
     }
-    trace("open_kpagemap");
     if(!walk_procdir(table)) {
         free(table);
         return NULL;
