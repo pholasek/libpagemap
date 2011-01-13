@@ -83,6 +83,7 @@ typedef struct proc_mapping {
 
 typedef struct pagemap_list {
     pagemap_t pid_table;
+    int exists; // used for marking existing pids in pagemap table
     struct pagemap_list * next;
 } pagemap_list;
 
@@ -215,6 +216,7 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
         if (!table->start)
             return NULL;
         table->start->pid_table.pid = n_pid;
+        table->start->exists = 1;
         table->start->next = NULL;
         table->curr = table->start;
         table->size = 0;
@@ -230,12 +232,64 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
             curr = curr->next;
             curr->pid_table.pid = n_pid;
             curr->pid_table.mappings = NULL;
+            curr->exists = 1;
             curr->next = NULL;
             return curr;
-        } else
+        } else {
+            curr->exists = 1;
             return curr;
+        }
     }
     return NULL;
+}
+
+static pagemap_list * delete_pid(int n_pid, pagemap_tbl * table) {
+    pagemap_list * curr, * guilty;
+
+    if (!table || !(table->start))
+        return NULL;
+
+    curr = table->start;
+    if (curr->pid_table.pid == n_pid) {
+        table->start = curr->next;
+        free(curr);
+        return table->start;
+    }
+    while (!curr->next) {
+        if (curr->next->pid_table.pid == n_pid) {
+            guilty = curr->next;
+            curr->next = curr->next->next;
+            free(guilty);
+            return curr->next;
+        }
+        curr = curr->next;
+    }
+    return curr;
+}
+
+static inline void invalidate_pids(pagemap_tbl * table) {
+    pagemap_list * curr;
+
+    if (!table || !(table->start))
+        return;
+    curr = table->start;
+    while (curr->next) {
+        curr->exists = 0;
+        curr = curr->next;
+    }
+}
+
+static inline void polish_table(pagemap_tbl * table) {
+    pagemap_list * curr;
+
+    if (!table || !(table->start))
+        return;
+    curr = table->start;
+    while (curr->next) {
+        if (!curr->exists)
+            delete_pid(curr->pid_table.pid, table);
+        curr = curr->next;
+    }
 }
 ////////////////////////////////////////////////////////////////
 static int read_cmd(pagemap_t * p_t) {
@@ -571,6 +625,7 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
     if (!proc_dir)
         return NULL;
     table->size = 0;
+    invalidate_pids(table);
     while ((proc_ent = readdir(proc_dir))) {
         if (sscanf(proc_ent->d_name,"%d",&curr_pid) == 1) {
             sprintf(path,"/proc/%d/pagemap",curr_pid);
@@ -580,8 +635,8 @@ static pagemap_tbl * walk_procdir(pagemap_tbl * table) {
             }
         }
     }
-    // Develop some manner to remove dead pids - some flag for refreshed pids
     closedir(proc_dir);
+    polish_table(table);
     return table;
 }
 
