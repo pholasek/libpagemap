@@ -32,38 +32,38 @@ typedef struct pagemap_t {
     struct proc_mapping * mappings;
     char cmdline[SMALLBUF];
    // non-kpageflags counts
-    unsigned long uss;      // number of pages of uss memory
-    unsigned long pss;      // number of pages of pss memory
-    unsigned long swap;     // number of pages of memory in swap
-    unsigned long res;      // number of pages of memory in physical RAM
-    unsigned long shr;      // number of pages of shared memory
+    unsigned int uss;      // number of pages of uss memory
+    unsigned int pss;      // number of pages of pss memory
+    unsigned int swap;     // number of pages of memory in swap
+    unsigned int res;      // number of pages of memory in physical RAM
+    unsigned int shr;      // number of pages of shared memory
    // IO related page stats
-    unsigned long n_drt;    // number of dirty pages
-    unsigned long n_uptd;   // number of pages of up-to date memory
-    unsigned long n_wback;  // number of pages of just writebacked memory
-    unsigned long n_err;    // number of pages with IO errors
+    unsigned int n_drt;    // number of dirty pages
+    unsigned int n_uptd;   // number of pages of up-to date memory
+    unsigned int n_wback;  // number of pages of just writebacked memory
+    unsigned int n_err;    // number of pages with IO errors
    // various stats
-    unsigned long n_lck;    // number of locked pages
-    unsigned long n_slab;   // number of pages managed by sl{a,o,u,q}b allocator
-    unsigned long n_buddy;  // number of blocks managed by buddy system allocator
-    unsigned long n_cmpndh; // number of compound heads pages
-    unsigned long n_cmpndt; // number of compound tails pages - not accurate
-    unsigned long n_ksm;    // number of pages shared by ksm
-    unsigned long n_hwpois; // number of hw damaged pages
-    unsigned long n_huge;   // number of HugeTLB pages
-    unsigned long n_npage;  // number of non-existing page frames for given
+    unsigned int n_lck;    // number of locked pages
+    unsigned int n_slab;   // number of pages managed by sl{a,o,u,q}b allocator
+    unsigned int n_buddy;  // number of blocks managed by buddy system allocator
+    unsigned int n_cmpndh; // number of compound heads pages
+    unsigned int n_cmpndt; // number of compound tails pages - not accurate
+    unsigned int n_ksm;    // number of pages shared by ksm
+    unsigned int n_hwpois; // number of hw damaged pages
+    unsigned int n_huge;   // number of HugeTLB pages
+    unsigned int n_npage;  // number of non-existing page frames for given
                             //  addresses
    // LRU related stats
-    unsigned long n_mmap;       // number of pages of mmap()ed memmory
-    unsigned long n_anon;       // number of pages of anonymous memory
-    unsigned long n_swpche;     // number of pages of swap-cached memory
-    unsigned long n_swpbck;     // number of pages of swap-backed memory
-    unsigned long n_onlru;      // number of pages of memory which are on LRU lists
-    unsigned long n_actlru;     // number of pages of memory which are on active LRU lists
-    unsigned long n_unevctb;    // number of unevictable pages 
-    unsigned long n_referenced; // number of pages which were referenced since last LRU
+    unsigned int n_mmap;       // number of pages of mmap()ed memmory
+    unsigned int n_anon;       // number of pages of anonymous memory
+    unsigned int n_swpche;     // number of pages of swap-cached memory
+    unsigned int n_swpbck;     // number of pages of swap-backed memory
+    unsigned int n_onlru;      // number of pages of memory which are on LRU lists
+    unsigned int n_actlru;     // number of pages of memory which are on active LRU lists
+    unsigned int n_unevctb;    // number of unevictable pages 
+    unsigned int n_referenced; // number of pages which were referenced since last LRU
                                     // enqueue/requeue
-    unsigned long n_recycle;   // number of pages which are assigned to recycling
+    unsigned int n_recycle;   // number of pages which are assigned to recycling
 } pagemap_t;
 
 typedef struct pagemap_tbl {
@@ -83,9 +83,6 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table);
 // fill up pagemap tables for all processes on system
 // or exactly one pid, if was choosen
 pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int pid);
-
-// iterate over pagemap_tbl - returns NULL at the end
-pagemap_t * iterate_over_all(pagemap_tbl * table);
 
 // get exactly one pid from table
 pagemap_t * get_pid_from_table(pagemap_tbl * table);

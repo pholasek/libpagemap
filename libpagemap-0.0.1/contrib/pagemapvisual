@@ -182,11 +182,10 @@ class Painter:
                 cnt = '\0'*8
             c = struct.unpack("Q", cnt)[0]
 
-            if c < 10000: # hack against kpagecount 'bug'
-                try:
-                    self.p_data[c] += 1
-                except KeyError:
-                    self.p_data[c] = 1
+            try:
+                self.p_data[c] += 1
+            except KeyError:
+                self.p_data[c] = 1
 
 
     def prepare_flags(self):
