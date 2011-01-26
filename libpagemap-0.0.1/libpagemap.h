@@ -69,6 +69,7 @@ typedef struct pagemap_t {
 typedef struct pagemap_tbl {
     struct pagemap_list * start; //it will be root of tree
     struct pagemap_list * curr;
+    struct pagemap_list * curr_r; // pointer for reading
     unsigned long size;  //number of pagemap processes
     int flags;
     struct kpagemap_t * kpagemap;
@@ -83,9 +84,6 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table);
 // fill up pagemap tables for all processes on system
 // or exactly one pid, if was choosen
 pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int pid);
-
-// get exactly one pid from table
-pagemap_t * get_pid_from_table(pagemap_tbl * table);
 
 // close pagemap tables and free them
 void close_pgmap_table(pagemap_tbl * table);
@@ -103,6 +101,7 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
 // it returns all proc_t step by step, return NULL at the end
 pagemap_t * iterate_over_all(pagemap_tbl * table);
 
+// reset reading pointer in table, should be used only for reading
 pagemap_t * reset_table_pos(pagemap_tbl * table);
 
 // it returns number of pages of physical ram

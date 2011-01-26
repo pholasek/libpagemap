@@ -243,6 +243,17 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
     return NULL;
 }
 
+static void free_mappings(pagemap_list * tmp) {
+    proc_mapping * temp;
+    if (tmp->pid_table.mappings) {
+        do {
+        temp = tmp->pid_table.mappings;
+        tmp->pid_table.mappings = tmp->pid_table.mappings->next;
+        free(temp);
+        } while (tmp->pid_table.mappings != NULL);
+    }
+}
+
 static pagemap_list * delete_pid(int n_pid, pagemap_tbl * table) {
     pagemap_list * curr, * guilty;
 
@@ -252,6 +263,7 @@ static pagemap_list * delete_pid(int n_pid, pagemap_tbl * table) {
     curr = table->start;
     if (curr->pid_table.pid == n_pid) {
         table->start = curr->next;
+        free_mappings(curr);
         free(curr);
         return table->start;
     }
@@ -259,6 +271,7 @@ static pagemap_list * delete_pid(int n_pid, pagemap_tbl * table) {
         if (curr->next->pid_table.pid == n_pid) {
             guilty = curr->next;
             curr->next = curr->next->next;
+            free_mappings(guilty);
             free(guilty);
             return curr->next;
         }
@@ -267,30 +280,6 @@ static pagemap_list * delete_pid(int n_pid, pagemap_tbl * table) {
     return curr;
 }
 
-static inline void invalidate_pids(pagemap_tbl * table) {
-    pagemap_list * curr;
-
-    if (!table || !(table->start))
-        return;
-    curr = table->start;
-    while (curr->next) {
-        curr->exists = 0;
-        curr = curr->next;
-    }
-}
-
-static inline void polish_table(pagemap_tbl * table) {
-    pagemap_list * curr;
-
-    if (!table || !(table->start))
-        return;
-    curr = table->start;
-    while (curr->next) {
-        if (!curr->exists)
-            delete_pid(curr->pid_table.pid, table);
-        curr = curr->next;
-    }
-}
 ////////////////////////////////////////////////////////////////
 static int read_cmd(pagemap_t * p_t) {
     FILE * cmdline_fd = NULL;
@@ -385,14 +374,34 @@ static void kill_mappings(pagemap_tbl * table) {
 
     reset_pos(table);
     while ((tmp = pid_iter(table))) {
-        if (tmp->pid_table.mappings) {
-            do {
-            temp = tmp->pid_table.mappings;
-            tmp->pid_table.mappings = tmp->pid_table.mappings->next;
-            free(temp);
-            } while (tmp->pid_table.mappings != NULL);
-        }
+        free_mappings(tmp);
     }
+}
+
+static inline void invalidate_pids(pagemap_tbl * table) {
+    pagemap_list * curr;
+
+    if (!table || !(table->start))
+        return;
+    curr = table->start;
+    while (curr->next) {
+        curr->exists = 0;
+        curr = curr->next;
+    }
+}
+
+static inline void polish_table(pagemap_tbl * table) {
+    pagemap_list * curr;
+
+    if (!table || !(table->start))
+        return;
+    curr = table->start;
+    while (curr->next) {
+        if (!curr->exists)
+            delete_pid(curr->pid_table.pid, table);
+        curr = curr->next;
+    }
+    kill_mappings(table);
 }
 
 static inline pagemap_t * set_flags(pagemap_t * p_t, uint64_t datanum) {
@@ -489,6 +498,33 @@ static int walk_proc_mem(pagemap_t * p_t, pagemap_tbl * table) {
         trace("error pagemap open");
         return ERROR;
     }
+    p_t->res = 0;
+    p_t->uss = 0;
+    p_t->pss = 0;
+    p_t->swap = 0;
+    p_t->shr = 0;
+    p_t->n_drt = 0;
+    p_t->n_uptd = 0;
+    p_t->n_wback = 0;
+    p_t->n_err = 0;
+    p_t->n_lck = 0;
+    p_t->n_slab = 0;
+    p_t->n_buddy = 0;
+    p_t->n_cmpndh = 0;
+    p_t->n_cmpndt = 0;
+    p_t->n_ksm = 0;
+    p_t->n_hwpois = 0;
+    p_t->n_huge = 0;
+    p_t->n_npage = 0;
+    p_t->n_mmap = 0;
+    p_t->n_anon = 0;
+    p_t->n_swpche = 0;
+    p_t->n_swpbck = 0;
+    p_t->n_onlru = 0;
+    p_t->n_actlru = 0;
+    p_t->n_unevctb = 0;
+    p_t->n_referenced = 0;
+    p_t->n_recycle = 0;
 
     for (proc_mapping * cur = p_t->mappings; cur != NULL; cur = cur->next) {
         for (uint64_t addr = cur->start; addr < cur->end; addr += table->kpagemap->pagesize) {
@@ -692,14 +728,17 @@ void close_pgmap_table(pagemap_tbl * table) {
 // must me used with initialised table
 pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid)
 {
-    pagemap_list * tmp;
+    pagemap_t * tmp;
 
     if (!table)
         return NULL;
-    if (!(tmp = search_pid(pid,table)))
+    if (reset_table_pos(table) == NULL)
         return NULL;
-    else
-        return &tmp->pid_table;
+    while ((tmp = iterate_over_all(table)) != NULL) {
+        if (tmp->pid == pid)
+            return tmp;
+    }
+    return NULL;
 }
 
 // user is responsible for cleaning-up :)
@@ -715,7 +754,7 @@ pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size)
     if (!arr)
         return NULL;
     reset_pos(table);
-    while ((p = iterate_over_all(table)) && cnt < table->size) {
+    while ((p = &(pid_iter(table)->pid_table)) && cnt < table->size) {
         arr[cnt] = p;
         cnt++;
     }
@@ -739,18 +778,31 @@ int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned lon
 }
 
 // Every single-call return pagemap_t, NULL at the end
+// Use only for reading!
 pagemap_t * iterate_over_all(pagemap_tbl * table)
 {
     pagemap_list * tmp;
-    tmp = pid_iter(table);
 
-    return &tmp->pid_table;
+    if (!table)
+        return NULL;
+    else if (!(table->curr_r))
+        return NULL;
+    else {
+        tmp = table->curr_r;
+        table->curr_r = table->curr_r->next;
+        return &tmp->pid_table;
+    }
+    return NULL;
 }
 
 // Reset position of pid table seeker
 pagemap_t * reset_table_pos(pagemap_tbl * table)
 {
-    return reset_pos(table);
+    if (!table || !(table->start))
+        return NULL;
+    else
+        table->curr_r = table->start;
+    return &(table->curr_r->pid_table);
 }
 
 // Return amount of physical memory pages
