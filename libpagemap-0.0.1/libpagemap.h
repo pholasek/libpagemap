@@ -27,7 +27,7 @@ struct proc_mapping;
 struct pagemap_list;
 struct kpagemap_t;
 
-typedef struct pagemap_t {
+typedef struct process_pagemap_t {
     int pid;
     struct proc_mapping * mappings;
     char cmdline[SMALLBUF];
@@ -64,7 +64,7 @@ typedef struct pagemap_t {
     unsigned int n_referenced; // number of pages which were referenced since last LRU
                                     // enqueue/requeue
     unsigned int n_recycle;   // number of pages which are assigned to recycling
-} pagemap_t;
+} process_pagemap_t;
 
 typedef struct pagemap_tbl {
     struct pagemap_list * start; //it will be root of tree
@@ -86,26 +86,27 @@ pagemap_tbl * init_pgmap_table(pagemap_tbl * table);
 pagemap_tbl * open_pgmap_table(pagemap_tbl * table, int pid);
 
 // close pagemap tables and free them
-void close_pgmap_table(pagemap_tbl * table);
+void free_pgmap_table(pagemap_tbl * table);
 
 // return single pagemap table for one pid - AD-HOC
-pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid);
+process_pagemap_t * get_single_pgmap(pagemap_tbl * table, int pid);
 
 // return array of pointers to proc_tables - useful for sorting
-pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size);
+// calling user is responsible for freeing returned array
+process_pagemap_t ** get_all_pgmap(pagemap_tbl * table, int * size);
 
 // return single pagemap table for physical memory mapping
 // uses only k{pageflags,pagecount} files = require PAGEMAP_ROOT flag
 int get_physical_pgmap(pagemap_tbl * table, unsigned long * shared, unsigned long * free, unsigned long * nonshared);
 
 // it returns all proc_t step by step, return NULL at the end
-pagemap_t * iterate_over_all(pagemap_tbl * table);
+process_pagemap_t * iterate_over_all(pagemap_tbl * table);
 
 // reset reading pointer in table, should be used only for reading
-pagemap_t * reset_table_pos(pagemap_tbl * table);
+process_pagemap_t * reset_table_pos(pagemap_tbl * table);
 
 // it returns number of pages of physical ram
-uint64_t get_ram_size(pagemap_tbl * table);
+uint64_t get_ram_size_in_pages(pagemap_tbl * table);
 
 // it returns 8-tuple of bytes (uint64_t) from kpagecount/kpageflags
 uint64_t get_kpgflg(pagemap_tbl * table, uint64_t page);

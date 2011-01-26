@@ -41,17 +41,17 @@
                       "\t -p :prints numbers in pages (instead of default kB)\n"\
                       "\t -F :prints info from kpageflags file\n"\
                       "\t -P pid :prints only specified pid\n"\
-                      "\t -s [uss|pss|shr|res|swap|pid][+-]\n"
+                      "\t -s [uss|pss|shr|res|swap|pid][+-] :sort by given stat\n"
 #define BUFFSIZE       128
 
 #define DEF_PRINT(item) \
-    static unsigned long get_ ## item(pagemap_t * table) \
+    static unsigned long get_ ## item(process_pagemap_t * table) \
     { \
         return table->item; \
     }
 
 #define DEF_CMP(item) \
-    static int cmp_ ## item(pagemap_t ** table1, pagemap_t ** table2) \
+    static int cmp_ ## item(process_pagemap_t ** table1, process_pagemap_t ** table2) \
     { \
         if ((*table1)->item > (*table2)->item) \
             return 1; \
@@ -64,8 +64,8 @@ typedef struct header_t {
     const char * desc;
     const char * name;
     int width;
-    unsigned long (*prfun)(pagemap_t * table);
-    int (*sortfun)(pagemap_t **, pagemap_t **);
+    unsigned long (*prfun)(process_pagemap_t * table);
+    int (*sortfun)(process_pagemap_t **, process_pagemap_t **);
 } header_t;
 
 typedef struct header_list {
@@ -131,11 +131,11 @@ DEF_CMP(n_uptd);
 DEF_CMP(n_wback);
 DEF_CMP(n_recycle);
 
-static char * get_cmdline(pagemap_t * table) 
+static char * get_cmdline(process_pagemap_t * table) 
 {
     return table->cmdline;
 }
-static int cmp_cmdline(pagemap_t ** table1, pagemap_t ** table2)
+static int cmp_cmdline(process_pagemap_t ** table1, process_pagemap_t ** table2)
 {
     return strcmp((*table1)->cmdline, (*table2)->cmdline);
 }
@@ -182,7 +182,7 @@ static int P_arg; // filter pid with argument
 static int s_arg; // sort results
 static int filter_pid; // pid, which only be shown
 static char sort_id[BUFFSIZE]; // for sort option
-static int (*sort_func)(pagemap_t **, pagemap_t **); //pointer to sorting function
+static int (*sort_func)(process_pagemap_t **, process_pagemap_t **); //pointer to sorting function
 static int sort_sign; // + or - ?
 // with non-args are all disabled
 
@@ -344,7 +344,7 @@ static void destroy_header(header_list * list) {
 }
 
 // print_row - prints data row but with first argument NULL, prints headers
-static void print_row(pagemap_t * table, header_list * head_l)
+static void print_row(process_pagemap_t * table, header_list * head_l)
 {
     header_list * curr;
     int psize_c;
@@ -395,7 +395,7 @@ static void print_stats(pagemap_tbl * table)
 }
 
 // print_data - main printing function
-static void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
+static void print_data(process_pagemap_t ** table_arr, int size, header_list * head_l)
 {
     int i = 0;
 
@@ -408,13 +408,13 @@ static void print_data(pagemap_t ** table_arr, int size, header_list * head_l)
 }
 
 // sort_f - envelope for sorting functions
-static int sort_f(pagemap_t ** table1, pagemap_t ** table2)
+static int sort_f(process_pagemap_t ** table1, process_pagemap_t ** table2)
 {
     return sort_sign*(sort_func(table1,table2));
 }
 
 // sort_data - sort pointers in table_arr in requested order
-static void sort_data(pagemap_t ** table_arr, int size, char * key)
+static void sort_data(process_pagemap_t ** table_arr, int size, char * key)
 {
     header_t what, * res;
     int key_len;
@@ -436,15 +436,15 @@ static void sort_data(pagemap_t ** table_arr, int size, char * key)
         return;
     }
     sort_func = res->sortfun;
-    qsort(table_arr, size, sizeof(pagemap_t*),(void *)sort_f);
+    qsort(table_arr, size, sizeof(process_pagemap_t*),(void *)sort_f);
 }
 
 int main(int argc, char * argv[])
 {
     header_list * hlist;
     pagemap_tbl * table = NULL;
-    pagemap_t ** table_arr;
-    pagemap_t * one_tab;
+    process_pagemap_t ** table_arr;
+    process_pagemap_t * one_tab;
     int size,i;
 
     parse_args(argc,argv);
@@ -478,11 +478,11 @@ int main(int argc, char * argv[])
         if (one_tab)
             if (!d_arg)
                 print_row(NULL,hlist);
-            print_row(one_tab,hlist);
+        print_row(one_tab,hlist);
     }
 
     //release sources
-    close_pgmap_table(table);
+    free_pgmap_table(table);
     i=0;
     free(table_arr);
     destroy_header(hlist);
