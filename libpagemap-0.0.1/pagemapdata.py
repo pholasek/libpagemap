@@ -177,7 +177,7 @@ class PagemapData:
         except: 
             raise NoStatusAccess(name)
 
-        cmd = p_file.readline()[6:]
+        cmd = p_file.readline()[6:-1]
         
         p_file.close()
 

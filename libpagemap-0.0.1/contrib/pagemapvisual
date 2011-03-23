@@ -53,6 +53,7 @@ PGMAP = 3
 
 BAR   = 4
 PIE   = 5
+CSV   = 13
 
 PID   = 6
 NAME  = 7
@@ -65,7 +66,7 @@ SHR   = 12
 
 parser = argparse.ArgumentParser()
 parser.add_argument('source', choices=['pagecount','pageflags','pagemap'],help='source of data')
-parser.add_argument('type', choices=['bar','pie'], help='type of chart')
+parser.add_argument('type', choices=['bar','pie','csv'], help='type of chart')
 parser.add_argument('--stat', nargs='?', const='uss', default='uss', help='type of statistics to plot STAT=[uss|pss|shr|swap|res] uss is default')
 parser.add_argument('--label', nargs='?', const='name', default='name', help='type of label on pagemap statistics LABEL=[name|pid]')
 parser.add_argument('--filtery', nargs='?', const='', default='', help='filter used for y-axis values FILTERY=[[from]:[to]]')
@@ -111,6 +112,8 @@ class Painter:
             self.s_type = BAR
         elif args.type == 'pie':
             self.s_type = PIE
+        elif args.type == 'csv':
+            self.s_type = CSV
         else:
             self.s_type = -1 # should never happen
 
@@ -162,7 +165,8 @@ class Painter:
                              }
         self.type_switch = {
                              BAR : self.draw_bar,
-                             PIE : self.draw_pie
+                             PIE : self.draw_pie,
+                             CSV : self.write_csv
                            }
 
         self.p_data = {}
@@ -338,6 +342,20 @@ class Painter:
 
         show()
 
+    def write_csv(self):
+    '''
+    Write output as CSV format
+    '''
+    if self.s_src == FLAGS:
+        print "flag,pages"
+    elif self.s_src == COUNT:
+        print "mapcount,pages"
+    elif self.s_src == PGMAP:
+        print ''.join([args.label,',',args.stat]) 
+
+    for k,v in self.p_data.items():
+        print "%s,%s" % (k,v)
+
     def filter_parse(self, filter_str):
         '''
         Method parses given filter values
@@ -400,11 +418,11 @@ class Painter:
         '''
         Core method which starts data prepare and plot
         '''
-        print 'Preparing data . . .'
+        #print 'Preparing data . . .'
         self.source_switch.get(self.s_src, 1)()
         self.filter_values()
         self.limit_values()
-        print 'Ploting data . . .'
+        #print 'Ploting data . . .'
         self.type_switch.get(self.s_type, 1)()
 
 

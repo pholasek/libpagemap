@@ -2,7 +2,7 @@ libpagemap - library for utilizing of kernel's pagemap interface
 
 1. About pagemap
 2. Using
-3. Provided utility pgmap
+3. Provided utilities
 3. Install
 4. Uninstall
 
@@ -17,13 +17,15 @@ Further info: Documentation/vm/pagemap.txt
 2. Using
 
 Using of functions init_pgmap_table and the open_pgmap_table is
-necessary in every cases. Cleaning function close_pgmap_table will
+necessary in every cases. Cleaning function free_pgmap_table will
 help to avoid of memory leaks.
 
-3. Provided utility pgmap
+3. Provided utilities
 
 Library is shipped with small pgmap utility, which is installed 
 along of library. After install, try pgmap -h for more info.
+There is a python script pagemapvisual in contrib/ folder, can
+be used for drawings of memory stats by matplotlib.
 
 4. Install
 

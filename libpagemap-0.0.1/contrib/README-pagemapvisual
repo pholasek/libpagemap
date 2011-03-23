@@ -21,7 +21,7 @@ Pagemapvisual
 
     usage: pagemapvisual [-h] [--stat [STAT]] [--label [LABEL]]
                          [--filtery [FILTERY]] [--logy] [--limity [LIMITY]]
-                         {pagecount,pageflags,pagemap} {bar,pie}
+                         {pagecount,pageflags,pagemap} {bar,pie,csv}
 
     positional arguments:
       {pagecount,pageflags,pagemap}

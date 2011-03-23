@@ -41,7 +41,8 @@
                       "\t -p :prints numbers in pages (instead of default kB)\n"\
                       "\t -F :prints info from kpageflags file\n"\
                       "\t -P pid :prints only specified pid\n"\
-                      "\t -s [uss|pss|shr|res|swap|pid][+-] :sort by given stat\n"
+                      "\t -s [uss|pss|shr|res|swap|pid][+-] :sort by given stat\n"\
+                      "\t -c :prints in csv format\n"
 #define BUFFSIZE       128
 
 #define DEF_PRINT(item) \
@@ -180,6 +181,7 @@ static int p_arg; // prints result in numbers of pages (adds pagesize into heade
 static int F_arg; // prints flag stuff too
 static int P_arg; // filter pid with argument
 static int s_arg; // sort results
+static int c_arg; // csv form
 static int filter_pid; // pid, which only be shown
 static char sort_id[BUFFSIZE]; // for sort option
 static int (*sort_func)(process_pagemap_t **, process_pagemap_t **); //pointer to sorting function
@@ -213,7 +215,7 @@ static int parse_args(int argc, char * argv[])
         P_arg = 0;
         s_arg = 0;
     } else {
-        while((opt = getopt(argc,argv,"hndFpP:s:")) != -1) {
+        while((opt = getopt(argc,argv,"hncdFpP:s:")) != -1) {
             switch (opt) {
                 case 'n':
                     n_arg = 1;
@@ -229,6 +231,9 @@ static int parse_args(int argc, char * argv[])
                     break;
                 case 'h':
                     print_help();
+                    break;
+                case 'c':
+                    c_arg = 1;
                     break;
                 case 'P':
                     P_arg = 1;
@@ -360,19 +365,28 @@ static void print_row(process_pagemap_t * table, header_list * head_l)
     if (!table) {
         //print header
         while(curr) {
-            printf("%s", curr->item.desc);
+            if (!c_arg) {
+                printf("%s", curr->item.desc);
+            } else {
+                if (curr->next)
+                     printf("%s,", curr->item.name);
+                else
+                     printf("%s", curr->item.name);
+            }
             curr = curr->next;
         }
         printf("\n");
     } else {
         while(curr) {
             if (curr->item.width != -1) {
-                sprintf(pbuf,"%%-%dlu",curr->item.width);
-                if (curr->item.prfun != &get_pid) { // wanna avoid string comparison
+                if (!c_arg)
+                    sprintf(pbuf,"%%-%dlu",curr->item.width);
+                else
+                    sprintf(pbuf,"%%lu,");
+                if (curr->item.prfun != &get_pid)  // wanna avoid string comparison
                     printf(pbuf, curr->item.prfun(table)*psize_c);
-                } else {
+                else 
                     printf(pbuf, curr->item.prfun(table));
-                }
             } else {
                 printf("%s", (char *) curr->item.prfun(table));
             }
@@ -399,8 +413,7 @@ static void print_data(process_pagemap_t ** table_arr, int size, header_list * h
 {
     int i = 0;
 
-    if (!d_arg)
-        print_row(NULL, head_l);
+    print_row(NULL, head_l);
     while (i < size) {
         print_row(table_arr[i], head_l);
         ++i;
