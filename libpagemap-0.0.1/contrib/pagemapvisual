@@ -343,18 +343,18 @@ class Painter:
         show()
 
     def write_csv(self):
-    '''
-    Write output as CSV format
-    '''
-    if self.s_src == FLAGS:
-        print "flag,pages"
-    elif self.s_src == COUNT:
-        print "mapcount,pages"
-    elif self.s_src == PGMAP:
-        print ''.join([args.label,',',args.stat]) 
+        '''
+        Write output as CSV format
+        '''
+        if self.s_src == FLAGS:
+            print "flag,pages"
+        elif self.s_src == COUNT:
+            print "mapcount,pages"
+        elif self.s_src == PGMAP:
+            print ''.join([args.label,',',args.stat]) 
 
-    for k,v in self.p_data.items():
-        print "%s,%s" % (k,v)
+        for k,v in self.p_data.items():
+            print "%s,%s" % (k,v)
 
     def filter_parse(self, filter_str):
         '''
