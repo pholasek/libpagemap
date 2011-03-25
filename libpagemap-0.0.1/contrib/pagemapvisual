@@ -22,7 +22,7 @@ import os
 import sys
 import array
 import time
-import argparse
+import optparse
 import struct
 import pagemapdata
 import matplotlib
@@ -64,14 +64,15 @@ SWAP  = 10
 RES   = 11
 SHR   = 12
 
-parser = argparse.ArgumentParser()
-parser.add_argument('source', choices=['pagecount','pageflags','pagemap'],help='source of data')
-parser.add_argument('type', choices=['bar','pie','csv'], help='type of chart')
-parser.add_argument('--stat', nargs='?', const='uss', default='uss', help='type of statistics to plot STAT=[uss|pss|shr|swap|res] uss is default')
-parser.add_argument('--label', nargs='?', const='name', default='name', help='type of label on pagemap statistics LABEL=[name|pid]')
-parser.add_argument('--filtery', nargs='?', const='', default='', help='filter used for y-axis values FILTERY=[[from]:[to]]')
-parser.add_argument('--logy', action='store_true', help='enable log scale on y-axis')
-parser.add_argument('--limity', nargs='?', const=0, type=int, default=0, help='eliminates results to first/last y-values LIMITY=[[+|-]NUMBER]')
+parser = optparse.OptionParser()
+parser.set_usage('pagemapvisual [-h] [--stat [STAT]] [--label [LABEL]]\012 \
+                  [--filtery [FILTERY]] [--logy] [--limity [LIMITY]]\012 \
+                  {pagecount,pageflags,pagemap} {bar,pie,csv}')
+parser.add_option('--stat', default='uss', help='type of statistics to plot STAT=[uss|pss|shr|swap|res] uss is default')
+parser.add_option('--label', default='name', help='type of label on pagemap statistics LABEL=[name|pid]')
+parser.add_option('--filtery', default='', help='filter used for y-axis values FILTERY=[[from]:[to]]')
+parser.add_option('--logy', action='store_true', help='enable log scale on y-axis')
+parser.add_option('--limity', type=int, default=0, help='eliminates results to first/last y-values LIMITY=[[+|-]NUMBER]')
 
 
 class RuntimeError(Exception):
@@ -80,6 +81,11 @@ class RuntimeError(Exception):
     '''
     pass
 
+class WrongArgumentsError(Exception):
+    '''
+    Wrong arguments error class
+    '''
+    pass
 
 class Painter:
     '''
@@ -425,16 +431,33 @@ class Painter:
         #print 'Ploting data . . .'
         self.type_switch.get(self.s_type, 1)()
 
+def reqopts_parser(args, options):
+    '''
+    Parse requested options - to be compatible with Fedora version
+    '''
+    options.source = ''
+    options.type = ''
+    for i in args:
+	if i == 'pagemap':
+	    options.source = i
+	elif i == 'pagecount':
+	    options.source = i
+	elif i == 'pageflags':
+	    options.source = i
+	elif i == 'csv':
+	    options.type = i
+	elif i == 'bar':
+	    options.type = i
+	elif i == 'pie':
+	    options.type = i
+    if options.source == '' or options.type == '':
+        print 'Source OR type of data is missing. Exit.'
+        raise WrongArgumentsError
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    p = Painter(args)
+    (options, args) = parser.parse_args()
+    reqopts_parser(args, options)
+       
+    p = Painter(options)
     p.run_plot()
-
-
-
-    
-
-    
-    
 
