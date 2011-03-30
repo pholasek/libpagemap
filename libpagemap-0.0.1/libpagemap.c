@@ -97,13 +97,11 @@ typedef struct kpagemap_t {
 } kpagemap_t;
 
 ///////// FUNCTIONS ///////////////////////////////
-static void trace(const char * string) {
 #ifdef DEBUG
-    fprintf(stderr, "%s\n", string);
+#define trace(string) fprintf(stderr, "%s\n", string);
 #else
 #define trace(string) ((void)0)
 #endif
-}
 
 static int open_kpagemap(kpagemap_t * kpagemap) {
     FILE * f = NULL;
@@ -244,7 +242,7 @@ static pagemap_list * add_pid(int n_pid, pagemap_tbl * table) {
 }
 
 static void free_mappings(pagemap_list * tmp) {
-    proc_mapping * temp, * next;
+    proc_mapping * next;
     while (tmp->pid_table.mappings) {
         next = tmp->pid_table.mappings->next;
         free(tmp->pid_table.mappings);
@@ -382,7 +380,6 @@ static pagemap_tbl * fill_mappings(pagemap_tbl * table) {
 
 static void clean_mappings(pagemap_tbl * table) {
     pagemap_list * tmp;
-    proc_mapping * temp;
 
     reset_pos(table);
     while ((tmp = pid_iter(table))) {

@@ -143,7 +143,7 @@ static int cmp_cmdline(process_pagemap_t ** table1, process_pagemap_t ** table2)
 
 // -1 width for strings like cmdline
 
-static header_t head_tbl[]={{"CMD     ",    "cmdline",       -1, get_cmdline     ,cmp_cmdline      },
+static header_t head_tbl[]={{"CMD     ",    "cmdline",       -1, (unsigned long (*)(process_pagemap_t * table)) get_cmdline     ,cmp_cmdline      },
                             {"ACTLRU  ",    "n_actlru",       8, get_n_actlru    ,cmp_n_actlru     },
                             {"ANON    ",    "n_anon",         8, get_n_anon      ,cmp_n_anon       },
                             {"BUDDY   ",    "n_buddy",        8, get_n_buddy     ,cmp_n_buddy      },
