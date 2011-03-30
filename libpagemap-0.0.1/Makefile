@@ -7,7 +7,7 @@ MINOR		:= 0
 MICRO 		:= 0
 VERSION		:= $(MAJOR).$(MINOR).$(MICRO)
 CC			:= gcc
-CFLAGS 		:= $(CFLAGS) -std=c99
+CFLAGS 		:= $(CFLAGS) -std=c99 -Wall
 LFLAGS		:= -fPIC
 INSTALL     := install -Dp #--owner=0 --group=0 
 LIB64       := lib$(shell [ -d /usr/lib64 ] && echo 64)
