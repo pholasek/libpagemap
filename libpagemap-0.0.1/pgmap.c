@@ -458,7 +458,7 @@ int main(int argc, char * argv[])
     pagemap_tbl * table = NULL;
     process_pagemap_t ** table_arr;
     process_pagemap_t * one_tab;
-    int size,i;
+    int size;
 
     parse_args(argc,argv);
 
@@ -496,7 +496,6 @@ int main(int argc, char * argv[])
 
     //release sources
     free_pgmap_table(table);
-    i=0;
     free(table_arr);
     destroy_header(hlist);
 
