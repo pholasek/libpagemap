@@ -615,7 +615,7 @@ static int pgmap_ver(void) {
     major = atoi(strtok(buffer,"."));
     minor = atoi(strtok(NULL,"."));
     patch = atoi(strtok(NULL,"."));
-    if (major == 2 && minor == 6 && patch >= 25)
+    if ((major >= 3) || (major == 2 && minor == 6 && patch >= 25))
         return OK;
     return ERROR;
 }
