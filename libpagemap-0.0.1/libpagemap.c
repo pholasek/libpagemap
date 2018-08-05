@@ -288,6 +288,7 @@ static int read_cmd(process_pagemap_t * p_t) {
     if (!cmdline_file)
         return RD_ERROR;
     if (!(fgets(name, SMALLBUF-1, cmdline_file))) {
+        fclose(cmdline_file);
         return RD_ERROR;
     }
     name_start = strchr(name,':');
